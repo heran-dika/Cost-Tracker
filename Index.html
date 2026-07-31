@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Cost Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"></script>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ===== LAYAR LOGIN ===== -->
+<div id="layarLogin" class="max-w-sm mx-auto p-6 pt-24">
+  <h1 class="text-xl font-bold mb-1">Cost Tracker</h1>
+  <p class="text-gray-500 text-sm mb-6">Dimsum Mentai Galaxy</p>
+  <input id="inputNama" type="text" placeholder="Nama kamu"
+    class="w-full border rounded-lg px-4 py-3 mb-3">
+  <button onclick="login()"
+    class="w-full bg-black text-white rounded-lg py-3 font-medium">Masuk</button>
+  <p id="loginError" class="text-red-500 text-sm mt-2 hidden">Nama nggak dikenali.</p>
+</div>
+
+<!-- ===== LAYAR UTAMA ===== -->
+<div id="layarUtama" class="hidden max-w-sm mx-auto p-4">
+  <div class="flex justify-between items-center mb-4">
+    <p class="text-gray-500 text-sm">Halo, <span id="namaUser" class="font-medium text-black"></span></p>
+    <button onclick="logout()" class="text-xs text-gray-400">Keluar</button>
+  </div>
+
+  <button onclick="document.getElementById('fotoInput').click()"
+    class="w-full bg-black text-white rounded-xl py-4 font-medium mb-4">
+    📷 Catat Pengeluaran
+  </button>
+  <input type="file" id="fotoInput" accept="image/*" capture="environment" class="hidden" onchange="fotoDipilih(event)">
+
+  <div id="statusProses" class="hidden text-center text-gray-500 text-sm py-8">
+    Membaca struk...
+  </div>
+</div>
+
+<!-- ===== LAYAR REVIEW ===== -->
+<div id="layarReview" class="hidden max-w-sm mx-auto p-4 pb-24">
+  <h2 class="font-bold mb-3">Review Pengeluaran</h2>
+
+  <label class="text-xs text-gray-500">Toko</label>
+  <input id="inputToko" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
+
+  <label class="text-xs text-gray-500">Tanggal</label>
+  <input id="inputTanggal" type="date" class="w-full border rounded-lg px-3 py-2 mb-3">
+
+  <div class="flex gap-2 mb-3">
+    <div class="flex-1">
+      <label class="text-xs text-gray-500">Jenis</label>
+      <select id="inputJenis" class="w-full border rounded-lg px-3 py-2">
+        <option value="Bisnis">Bisnis</option>
+        <option value="Pribadi">Pribadi</option>
+      </select>
+    </div>
+    <div class="flex-1">
+      <label class="text-xs text-gray-500">Kategori</label>
+      <select id="inputKategori" onchange="cekTambahKategori()" class="w-full border rounded-lg px-3 py-2"></select>
+    </div>
+  </div>
+  <input id="inputKategoriBaru" type="text" placeholder="Nama kategori baru"
+    class="hidden w-full border rounded-lg px-3 py-2 mb-3">
+
+  <div id="listItem" class="space-y-2 mb-3"></div>
+
+  <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4 max-w-sm mx-auto">
+    <button onclick="simpanSemua()" class="w-full bg-black text-white rounded-xl py-3 font-medium">
+      Simpan
+    </button>
+  </div>
+</div>
+
+<script>
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzL7nt-iFRZn85yM_laUndkBaEyQE3WxyoN1vXA5WOvxRnOJiGOGXyHi92zyTK2rJW4/exec';
+
+let hasilStruk = null;
+let kategoriList = [];
+
+function getDevice() {
+  let d = localStorage.getItem('ct_device');
+  if (!d) {
+    d = 'Device-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+    localStorage.setItem('ct_device', d);
+  }
+  return d;
+}
+
+async function callBackend(payload) {
+  const res = await fetch(WEB_APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+// ---- LOGIN ----
+window.onload = function () {
+  const namaTersimpan = localStorage.getItem('ct_nama');
+  if (namaTersimpan) {
+    masukKeUtama(namaTersimpan);
+  }
+};
+
+async function login() {
+  const nama = document.getElementById('inputNama').value.trim();
+  if (!nama) return;
+  const hasil = await callBackend({ action: 'login', nama: nama });
+  if (hasil.valid) {
+    localStorage.setItem('ct_nama', nama);
+    kategoriList = hasil.kategoriDefault || [];
+    masukKeUtama(nama);
+  } else {
+    document.getElementById('loginError').classList.remove('hidden');
+  }
+}
+
+function logout() {
+  localStorage.removeItem('ct_nama');
+  location.reload();
+}
+
+function masukKeUtama(nama) {
+  document.getElementById('layarLogin').classList.add('hidden');
+  document.getElementById('layarUtama').classList.remove('hidden');
+  document.getElementById('namaUser').innerText = nama;
+}
+
+// ---- CAPTURE + OCR ----
+function fotoDipilih(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  document.getElementById('statusProses').classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = async function () {
+    const base64 = reader.result.split(',')[1];
+    const hasil = await callBackend({
+      action: 'prosesStruk',
+      image: base64,
+      mimeType: file.type
+    });
+    document.getElementById('statusProses').classList.add('hidden');
+
+    if (hasil.error) {
+      alert('Gagal baca struk: ' + hasil.error);
+      return;
+    }
+    tampilkanReview(hasil);
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---- REVIEW ----
+async function tampilkanReview(hasil) {
+  hasilStruk = hasil;
+  document.getElementById('layarUtama').classList.add('hidden');
+  document.getElementById('layarReview').classList.remove('hidden');
+
+  document.getElementById('inputToko').value = hasil.toko_raw || '';
+  document.getElementById('inputTanggal').value = hasil.tanggal || new Date().toISOString().slice(0, 10);
+
+  // isi dropdown kategori
+  if (kategoriList.length === 0) {
+    const katalog = await callBackend({ action: 'login', nama: localStorage.getItem('ct_nama') });
+    kategoriList = katalog.kategoriDefault || ['Bahan Baku', 'Operasional', 'Kemasan', 'Pribadi'];
+  }
+  const selKategori = document.getElementById('inputKategori');
+  selKategori.innerHTML = kategoriList.map(k => `<option value="${k}">${k}</option>`).join('')
+    + '<option value="__baru__">+ Tambah kategori baru</option>';
+
+  // list item
+  const listEl = document.getElementById('listItem');
+  listEl.innerHTML = (hasil.items || []).map((item, i) => `
+    <div class="border rounded-lg p-3 bg-white">
+      <input data-i="${i}" data-field="nama_raw" value="${item.nama_raw || ''}"
+        class="w-full font-medium mb-2 border-b pb-1">
+      <div class="flex gap-2 text-sm">
+        <input data-i="${i}" data-field="qty" type="number" value="${item.qty || 1}"
+          class="w-16 border rounded px-2 py-1" placeholder="Qty">
+        <input data-i="${i}" data-field="satuan" value="${item.satuan || 'pcs'}"
+          class="w-20 border rounded px-2 py-1" placeholder="Satuan">
+        <input data-i="${i}" data-field="harga_total" type="number" value="${item.harga_total || 0}"
+          class="flex-1 border rounded px-2 py-1" placeholder="Harga total">
+      </div>
+      ${item.produk_match_id
+        ? '<p class="text-xs text-green-600 mt-1">✓ Cocok dengan katalog</p>'
+        : '<p class="text-xs text-orange-500 mt-1">Produk baru — bakal ditambah ke katalog</p>'}
+    </div>
+  `).join('');
+}
+
+function cekTambahKategori() {
+  const val = document.getElementById('inputKategori').value;
+  document.getElementById('inputKategoriBaru').classList.toggle('hidden', val !== '__baru__');
+}
+
+async function simpanSemua() {
+  const toko = document.getElementById('inputToko').value;
+  const tanggal = document.getElementById('inputTanggal').value;
+  const jenis = document.getElementById('inputJenis').value;
+  let kategori = document.getElementById('inputKategori').value;
+  if (kategori === '__baru__') {
+    kategori = document.getElementById('inputKategoriBaru').value.trim();
+    if (!kategori) { alert('Isi nama kategori baru dulu'); return; }
+  }
+
+  const nama = localStorage.getItem('ct_nama');
+  const device = getDevice();
+  const itemEls = document.querySelectorAll('#listItem [data-field]');
+  const items = {};
+  itemEls.forEach(el => {
+    const i = el.dataset.i;
+    items[i] = items[i] || {};
+    items[i][el.dataset.field] = el.value;
+  });
+
+  for (const i in items) {
+    const it = items[i];
+    const matchId = (hasilStruk.items[i] || {}).produk_match_id || '';
+    await callBackend({
+      action: 'simpanPengeluaran',
+      nama: nama,
+      device: device,
+      jenis: jenis,
+      idToko: hasilStruk.toko_match_id || '',
+      tokoRaw: toko,
+      kategori: kategori,
+      idProduk: matchId,
+      itemRaw: it.nama_raw,
+      qty: it.qty,
+      satuan: it.satuan,
+      hargaTotal: it.harga_total,
+      status: 'Manual'
+    });
+  }
+
+  alert('Tersimpan!');
+  document.getElementById('layarReview').classList.add('hidden');
+  document.getElementById('layarUtama').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
