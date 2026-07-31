@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost Tracker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ===== LAYAR SETUP (Web App URL + Gemini key) ===== -->
+<div id="layarSetup" class="hidden max-w-sm mx-auto p-6 pt-20">
+  <h1 class="text-xl font-bold mb-1">Cost Tracker</h1>
+  <p class="text-gray-500 text-sm mb-6">Sambungin ke instalasi kamu dulu</p>
+
+  <label class="text-xs text-gray-500">Web App URL</label>
+  <input id="setupWebAppUrl" type="text" placeholder="https://script.google.com/macros/s/..."
+    class="w-full border rounded-lg px-4 py-3 mb-3 text-sm">
+
+  <label class="text-xs text-gray-500">Gemini API Key</label>
+  <input id="setupGeminiKey" type="text" placeholder="API key dari aistudio.google.com"
+    class="w-full border rounded-lg px-4 py-3 mb-4 text-sm">
+
+  <button onclick="simpanSetup()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Lanjut</button>
+</div>
+
+<!-- ===== LAYAR LOGIN ===== -->
+<div id="layarLogin" class="hidden max-w-sm mx-auto p-6 pt-24">
+  <h1 class="text-xl font-bold mb-1">Cost Tracker</h1>
+  <p class="text-gray-500 text-sm mb-6">Masukin nama kamu</p>
+  <input id="inputNama" type="text" placeholder="Nama"
+    class="w-full border rounded-lg px-4 py-3 mb-3">
+  <button onclick="login()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Masuk</button>
+  <p id="loginError" class="text-red-500 text-sm mt-2 hidden">Nama nggak dikenali. Hubungi pemilik akun buat ditambahin.</p>
+</div>
+
+<!-- ===== APP UTAMA (4 tab) ===== -->
+<div id="appUtama" class="hidden max-w-sm mx-auto">
+
+  <div class="flex justify-between items-center p-4 border-b bg-white sticky top-0">
+    <p class="text-gray-500 text-sm">Halo, <span id="namaUser" class="font-medium text-black"></span></p>
+    <button onclick="logout()" class="text-xs text-gray-400">Keluar</button>
+  </div>
+
+  <!-- TAB: INPUT -->
+  <div id="tabInput" class="p-4 pb-20">
+    <div id="areaCapture">
+      <button onclick="document.getElementById('fotoKamera').click()"
+        class="w-full bg-black text-white rounded-xl py-4 font-medium mb-2">📷 Foto Struk</button>
+      <button onclick="document.getElementById('fotoGaleri').click()"
+        class="w-full bg-white border border-gray-300 rounded-xl py-4 font-medium mb-2">🖼️ Pilih dari Galeri</button>
+      <input type="file" id="fotoKamera" accept="image/*" capture="environment" class="hidden" onchange="fotoDipilih(event)">
+      <input type="file" id="fotoGaleri" accept="image/*" class="hidden" onchange="fotoDipilih(event)">
+      <div id="statusProses" class="hidden text-center text-gray-500 text-sm py-8">Membaca struk...</div>
+    </div>
+
+    <div id="areaReview" class="hidden">
+      <h2 class="font-bold mb-3">Review Pengeluaran</h2>
+      <label class="text-xs text-gray-500">Toko</label>
+      <input id="inputToko" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
+      <label class="text-xs text-gray-500">Tanggal</label>
+      <input id="inputTanggal" type="date" class="w-full border rounded-lg px-3 py-2 mb-3">
+      <div class="flex gap-2 mb-3">
+        <div class="flex-1">
+          <label class="text-xs text-gray-500">Jenis</label>
+          <select id="inputJenis" class="w-full border rounded-lg px-3 py-2">
+            <option value="Bisnis">Bisnis</option>
+            <option value="Pribadi">Pribadi</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="text-xs text-gray-500">Kategori</label>
+          <select id="inputKategori" onchange="cekTambahKategori()" class="w-full border rounded-lg px-3 py-2"></select>
+        </div>
+      </div>
+      <input id="inputKategoriBaru" type="text" placeholder="Nama kategori baru"
+        class="hidden w-full border rounded-lg px-3 py-2 mb-3">
+      <div id="listItem" class="space-y-2 mb-4"></div>
+      <div class="flex gap-2">
+        <button onclick="batalReview()" class="flex-1 border rounded-xl py-3 font-medium">Batal</button>
+        <button onclick="simpanSemua()" class="flex-1 bg-black text-white rounded-xl py-3 font-medium">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: RIWAYAT -->
+  <div id="tabRiwayat" class="hidden p-4 pb-20">
+    <div class="bg-white border rounded-xl p-4 mb-4">
+      <p class="text-xs text-gray-500">Total Hari Ini</p>
+      <p id="totalHariIni" class="text-2xl font-bold">Rp0</p>
+    </div>
+    <h3 class="font-medium text-sm mb-2">Hari Ini</h3>
+    <div id="listHariIni" class="mb-6"></div>
+
+    <div class="bg-white border rounded-xl p-4">
+      <h3 class="font-medium text-sm mb-2">Akumulasi (30 hari terakhir)</h3>
+      <div id="checklistKategori" class="space-y-1 mb-3"></div>
+      <p class="text-xs text-gray-500">Total kategori dicentang</p>
+      <p id="totalAkumulasi" class="text-xl font-bold">Rp0</p>
+    </div>
+  </div>
+
+  <!-- TAB: KATALOG -->
+  <div id="tabKatalog" class="hidden p-4 pb-20">
+    <h3 class="font-medium text-sm mb-2">Produk — harga termurah di atas</h3>
+    <div id="listProduk" class="mb-6"></div>
+    <h3 class="font-medium text-sm mb-2">Toko</h3>
+    <div id="listToko"></div>
+  </div>
+
+  <!-- TAB: SETTING -->
+  <div id="tabSetting" class="hidden p-4 pb-20">
+    <h3 class="font-medium text-sm mb-2">Koneksi</h3>
+    <label class="text-xs text-gray-500">Web App URL</label>
+    <input id="inputWebAppUrl" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
+    <label class="text-xs text-gray-500">Gemini API Key</label>
+    <input id="inputGeminiKey" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
+    <button onclick="simpanSetting()" class="w-full bg-black text-white rounded-lg py-2 font-medium mb-6">Simpan</button>
+
+    <div id="bagianKelolaAkses" class="hidden">
+      <h3 class="font-medium text-sm mb-2">Kelola Akses (Owner)</h3>
+      <div id="listAkses" class="mb-3"></div>
+      <div class="flex gap-2">
+        <input id="inputNamaBaru" type="text" placeholder="Nama staff baru" class="flex-1 border rounded-lg px-3 py-2 text-sm">
+        <button onclick="tambahAkses()" class="bg-black text-white rounded-lg px-4">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="fixed bottom-0 left-0 right-0 bg-white border-t flex max-w-sm mx-auto">
+    <button id="navInput" onclick="showTab('Input')" class="flex-1 py-3 text-center text-xs text-black">📷<br>Input</button>
+    <button id="navRiwayat" onclick="showTab('Riwayat')" class="flex-1 py-3 text-center text-xs text-gray-400">📋<br>Riwayat</button>
+    <button id="navKatalog" onclick="showTab('Katalog')" class="flex-1 py-3 text-center text-xs text-gray-400">📦<br>Katalog</button>
+    <button id="navSetting" onclick="showTab('Setting')" class="flex-1 py-3 text-center text-xs text-gray-400">⚙️<br>Setting</button>
+  </div>
+</div>
+
+<script>
+// ==== HELPER UMUM ====
+function formatRupiah(n) { return 'Rp' + Number(n || 0).toLocaleString('id-ID'); }
+
+function getDevice() {
+  let d = localStorage.getItem('ct_device');
+  if (!d) { d = 'Device-' + Math.random().toString(36).slice(2, 6).toUpperCase(); localStorage.setItem('ct_device', d); }
+  return d;
+}
+
+let jsonpCounter = 0;
+function callBackend(payload) {
+  return new Promise(function (resolve, reject) {
+    const url = localStorage.getItem('ct_webapp_url');
+    if (!url) { reject(new Error('Web App URL belum diisi')); return; }
+
+    const cbName = 'ctCallback' + (jsonpCounter++);
+    const script = document.createElement('script');
+
+    const bersihkan = function () {
+      delete window[cbName];
+      script.remove();
+    };
+
+    window[cbName] = function (data) {
+      resolve(data);
+      bersihkan();
+    };
+
+    script.onerror = function () {
+      reject(new Error('Gagal muat dari Web App URL — cek lagi URL-nya bener atau nggak'));
+      bersihkan();
+    };
+
+    script.src = url + '?callback=' + cbName + '&payload=' + encodeURIComponent(JSON.stringify(payload));
+    document.body.appendChild(script);
+
+    setTimeout(function () {
+      if (window[cbName]) {
+        reject(new Error('Timeout — backend nggak respons dalam 15 detik'));
+        bersihkan();
+      }
+    }, 15000);
+  });
+}
+
+async function panggilGemini(base64Image, mimeType, katalogProduk, katalogToko) {
+  const apiKey = localStorage.getItem('ct_gemini_key');
+  const payload = {
+    contents: [{ parts: [
+      { text: buildPrompt(katalogProduk, katalogToko) },
+      { inline_data: { mime_type: mimeType, data: base64Image } }
+    ] }],
+    generationConfig: { responseMimeType: 'application/json' }
+  };
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  return JSON.parse(json.candidates[0].content.parts[0].text);
+}
+
+function buildPrompt(katalogProduk, katalogToko) {
+  return [
+    'Kamu membaca struk belanja Indonesia (minimarket/toko kelontong/SPBU). Baca gambar struk dan keluarkan HANYA JSON (tanpa markdown, tanpa penjelasan) dengan struktur persis ini:',
+    '{"toko_raw": string, "toko_match_id": string atau null, "tanggal": "YYYY-MM-DD", "items": [{"nama_raw": string, "produk_match_id": string atau null, "qty": number, "satuan": string, "harga_total": number}], "total": number}',
+    '',
+    'Katalog Toko yang sudah ada — cocokkan toko_raw ke salah satu "ID Toko" kalau cabang yang sama, isi toko_match_id dengan ID itu, kalau tidak ada yang cocok isi null:',
+    JSON.stringify(katalogToko),
+    '',
+    'Katalog Produk yang sudah ada — cocokkan tiap item ke "ID Produk" yang sesuai (termasuk kalau di struk cuma disingkat, misal "ROSE B GL 1KG" untuk gula merk Rosebrand), kalau tidak ada yang cocok isi null:',
+    JSON.stringify(katalogProduk)
+  ].join('\n');
+}
+
+// ==== INIT / SETUP / LOGIN ====
+let kategoriListCache = [];
+let dataPengeluaran = [];
+let katalogProdukCache = [];
+let katalogTokoCache = [];
+let hasilStruk = null;
+
+window.onload = function () {
+  const webAppUrl = localStorage.getItem('ct_webapp_url');
+  const geminiKey = localStorage.getItem('ct_gemini_key');
+  const nama = localStorage.getItem('ct_nama');
+
+  if (!webAppUrl || !geminiKey) {
+    document.getElementById('layarSetup').classList.remove('hidden');
+  } else if (!nama) {
+    document.getElementById('layarLogin').classList.remove('hidden');
+  } else {
+    masukKeApp();
+  }
+};
+
+function simpanSetup() {
+  const url = document.getElementById('setupWebAppUrl').value.trim();
+  const key = document.getElementById('setupGeminiKey').value.trim();
+  if (!url || !key) { alert('Isi Web App URL dan API key dulu'); return; }
+  localStorage.setItem('ct_webapp_url', url);
+  localStorage.setItem('ct_gemini_key', key);
+  document.getElementById('layarSetup').classList.add('hidden');
+  document.getElementById('layarLogin').classList.remove('hidden');
+}
+
+async function login() {
+  const nama = document.getElementById('inputNama').value.trim();
+  if (!nama) return;
+  try {
+    const hasil = await callBackend({ action: 'login', nama: nama });
+    if (hasil.valid) {
+      localStorage.setItem('ct_nama', hasil.nama);
+      localStorage.setItem('ct_isowner', hasil.isOwner ? '1' : '0');
+      kategoriListCache = hasil.kategoriList || [];
+      masukKeApp();
+    } else {
+      document.getElementById('loginError').classList.remove('hidden');
+    }
+  } catch (err) {
+    alert('Gagal nyambung ke backend: ' + err.message + '\n\nCek lagi Web App URL di layar Setup (Keluar dulu > buka Setting kalau udah kepalang masuk), pastikan udah "New version" pas deploy terakhir.');
+  }
+}
+
+function logout() {
+  localStorage.removeItem('ct_nama');
+  localStorage.removeItem('ct_isowner');
+  location.reload();
+}
+
+function masukKeApp() {
+  document.getElementById('layarSetup').classList.add('hidden');
+  document.getElementById('layarLogin').classList.add('hidden');
+  document.getElementById('appUtama').classList.remove('hidden');
+  document.getElementById('namaUser').innerText = localStorage.getItem('ct_nama');
+  showTab('Input');
+}
+
+// ==== NAVIGASI TAB ====
+function showTab(tab) {
+  ['Input', 'Riwayat', 'Katalog', 'Setting'].forEach(function (t) {
+    document.getElementById('tab' + t).classList.toggle('hidden', t !== tab);
+    document.getElementById('nav' + t).classList.toggle('text-black', t === tab);
+    document.getElementById('nav' + t).classList.toggle('text-gray-400', t !== tab);
+  });
+  if (tab === 'Riwayat') muatRiwayat();
+  if (tab === 'Katalog') muatKatalog();
+  if (tab === 'Setting') bukaSetting();
+}
+
+// ==== TAB INPUT ====
+function fotoDipilih(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('statusProses').classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = async function () {
+    const base64 = reader.result.split(',')[1];
+    try {
+      const katalog = await callBackend({ action: 'getKatalog' });
+      katalogProdukCache = katalog.produk || [];
+      katalogTokoCache = katalog.toko || [];
+      const hasil = await panggilGemini(base64, file.type, katalogProdukCache, katalogTokoCache);
+      document.getElementById('statusProses').classList.add('hidden');
+      tampilkanReview(hasil);
+    } catch (err) {
+      document.getElementById('statusProses').classList.add('hidden');
+      alert('Gagal baca struk: ' + err.message);
+    }
+    event.target.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+function tampilkanReview(hasil) {
+  hasilStruk = hasil;
+  document.getElementById('areaCapture').classList.add('hidden');
+  document.getElementById('areaReview').classList.remove('hidden');
+
+  document.getElementById('inputToko').value = hasil.toko_raw || '';
+  document.getElementById('inputTanggal').value = hasil.tanggal || new Date().toISOString().slice(0, 10);
+
+  const selKategori = document.getElementById('inputKategori');
+  selKategori.innerHTML = kategoriListCache.map(function (k) { return '<option value="' + k + '">' + k + '</option>'; }).join('')
+    + '<option value="__baru__">+ Tambah kategori baru</option>';
+
+  document.getElementById('listItem').innerHTML = (hasil.items || []).map(function (item, i) {
+    return '<div class="border rounded-lg p-3 bg-white">' +
+      '<input data-i="' + i + '" data-field="nama_raw" value="' + (item.nama_raw || '') + '" class="w-full font-medium mb-2 border-b pb-1">' +
+      '<div class="flex gap-2 text-sm">' +
+      '<input data-i="' + i + '" data-field="qty" type="number" value="' + (item.qty || 1) + '" class="w-16 border rounded px-2 py-1" placeholder="Qty">' +
+      '<input data-i="' + i + '" data-field="satuan" value="' + (item.satuan || 'pcs') + '" class="w-20 border rounded px-2 py-1" placeholder="Satuan">' +
+      '<input data-i="' + i + '" data-field="harga_total" type="number" value="' + (item.harga_total || 0) + '" class="flex-1 border rounded px-2 py-1" placeholder="Harga total">' +
+      '</div>' +
+      (item.produk_match_id
+        ? '<p class="text-xs text-green-600 mt-1">✓ Cocok dengan katalog</p>'
+        : '<p class="text-xs text-orange-500 mt-1">Produk baru — bakal ditambah ke katalog</p>') +
+      '</div>';
+  }).join('');
+}
+
+function cekTambahKategori() {
+  const val = document.getElementById('inputKategori').value;
+  document.getElementById('inputKategoriBaru').classList.toggle('hidden', val !== '__baru__');
+}
+
+function batalReview() {
+  document.getElementById('areaReview').classList.add('hidden');
+  document.getElementById('areaCapture').classList.remove('hidden');
+}
+
+async function simpanSemua() {
+  const toko = document.getElementById('inputToko').value;
+  const tanggal = document.getElementById('inputTanggal').value;
+  const jenis = document.getElementById('inputJenis').value;
+  let kategori = document.getElementById('inputKategori').value;
+  if (kategori === '__baru__') {
+    kategori = document.getElementById('inputKategoriBaru').value.trim();
+    if (!kategori) { alert('Isi nama kategori baru dulu'); return; }
+  }
+
+  const nama = localStorage.getItem('ct_nama');
+  const device = getDevice();
+  const itemEls = document.querySelectorAll('#listItem [data-field]');
+  const items = {};
+  itemEls.forEach(function (el) {
+    const i = el.dataset.i;
+    items[i] = items[i] || {};
+    items[i][el.dataset.field] = el.value;
+  });
+
+  for (const i in items) {
+    const it = items[i];
+    const matchId = ((hasilStruk.items || [])[i] || {}).produk_match_id || '';
+    await callBackend({
+      action: 'simpanPengeluaran',
+      nama: nama, device: device, jenis: jenis,
+      idToko: hasilStruk.toko_match_id || '', tokoRaw: toko,
+      kategori: kategori,
+      idProduk: matchId, itemRaw: it.nama_raw,
+      qty: it.qty, satuan: it.satuan, hargaTotal: it.harga_total,
+      status: 'Manual'
+    });
+  }
+
+  alert('Tersimpan!');
+  batalReview();
+}
+
+// ==== TAB RIWAYAT ====
+async function muatRiwayat() {
+  const hasil = await callBackend({ action: 'getPengeluaran' });
+  dataPengeluaran = hasil.rows || [];
+  renderRiwayat();
+}
+
+function renderRiwayat() {
+  const sekarang = new Date();
+  const hariIni = sekarang.toDateString();
+  const batasBulan = new Date(sekarang.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const rowsHariIni = dataPengeluaran.filter(function (r) { return new Date(r['Timestamp']).toDateString() === hariIni; });
+  const totalHariIni = rowsHariIni.reduce(function (s, r) { return s + Number(r['Harga Total'] || 0); }, 0);
+
+  document.getElementById('totalHariIni').innerText = formatRupiah(totalHariIni);
+  document.getElementById('listHariIni').innerHTML = rowsHariIni.map(function (r) {
+    return '<div class="border-b py-2 text-sm flex justify-between bg-white px-2">' +
+      '<div><p class="font-medium">' + (r['Item (raw)'] || '-') + '</p>' +
+      '<p class="text-gray-400 text-xs">' + (r['Toko (raw)'] || '') + ' · ' + (r['Kategori'] || '') + '</p></div>' +
+      '<p class="font-medium">' + formatRupiah(r['Harga Total']) + '</p></div>';
+  }).join('') || '<p class="text-gray-400 text-sm">Belum ada input hari ini</p>';
+
+  const kategoriUnik = dataPengeluaran.map(function (r) { return r['Kategori']; }).filter(Boolean)
+    .filter(function (v, i, arr) { return arr.indexOf(v) === i; });
+
+  document.getElementById('checklistKategori').innerHTML = kategoriUnik.map(function (k) {
+    return '<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="chk-kategori" value="' + k + '" checked onchange="hitungAkumulasi()"> ' + k + '</label>';
+  }).join('');
+
+  hitungAkumulasi();
+}
+
+function hitungAkumulasi() {
+  const dicentang = Array.from(document.querySelectorAll('.chk-kategori:checked')).map(function (el) { return el.value; });
+  const batasBulan = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const total = dataPengeluaran
+    .filter(function (r) { return dicentang.indexOf(r['Kategori']) !== -1 && new Date(r['Timestamp']) >= batasBulan; })
+    .reduce(function (s, r) { return s + Number(r['Harga Total'] || 0); }, 0);
+  document.getElementById('totalAkumulasi').innerText = formatRupiah(total);
+}
+
+// ==== TAB KATALOG ====
+async function muatKatalog() {
+  const hasil = await callBackend({ action: 'getKatalog' });
+  katalogProdukCache = hasil.produk || [];
+  katalogTokoCache = hasil.toko || [];
+  if (dataPengeluaran.length === 0) {
+    const r = await callBackend({ action: 'getPengeluaran' });
+    dataPengeluaran = r.rows || [];
+  }
+  renderKatalog();
+}
+
+function renderKatalog() {
+  document.getElementById('listProduk').innerHTML = katalogProdukCache.map(function (p) {
+    const idP = p['ID Produk'];
+    const beliUntukProduk = dataPengeluaran.filter(function (r) { return r['ID Produk'] === idP; });
+    const perToko = {};
+    beliUntukProduk.forEach(function (r) {
+      const kunci = r['ID Toko'] || r['Toko (raw)'];
+      if (!perToko[kunci] || new Date(r['Timestamp']) > new Date(perToko[kunci]['Timestamp'])) perToko[kunci] = r;
+    });
+    const daftarToko = Object.values(perToko).sort(function (a, b) { return (a['Harga per Satuan'] || 0) - (b['Harga per Satuan'] || 0); });
+
+    return '<details class="border rounded-lg p-3 bg-white mb-2">' +
+      '<summary class="font-medium">' + p['Nama Kanonik'] + '</summary>' +
+      '<div class="mt-2 space-y-1 text-sm">' +
+      (daftarToko.map(function (r, i) {
+        return '<div class="flex justify-between ' + (i === 0 ? 'text-green-600 font-medium' : 'text-gray-500') + '">' +
+          '<span>' + r['Toko (raw)'] + '</span>' +
+          '<span>' + formatRupiah(r['Harga per Satuan']) + ' · ' + new Date(r['Timestamp']).toLocaleDateString('id-ID') + '</span></div>';
+      }).join('') || '<p class="text-gray-400">Belum ada data harga</p>') +
+      '</div></details>';
+  }).join('') || '<p class="text-gray-400 text-sm">Katalog produk masih kosong</p>';
+
+  document.getElementById('listToko').innerHTML = katalogTokoCache.map(function (t) {
+    return '<div class="border rounded-lg p-3 bg-white mb-2 text-sm">' + t['Nama Kanonik Cabang'] + '</div>';
+  }).join('') || '<p class="text-gray-400 text-sm">Katalog toko masih kosong</p>';
+}
+
+// ==== TAB SETTING ====
+function bukaSetting() {
+  document.getElementById('inputWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
+  document.getElementById('inputGeminiKey').value = localStorage.getItem('ct_gemini_key') || '';
+  const isOwner = localStorage.getItem('ct_isowner') === '1';
+  document.getElementById('bagianKelolaAkses').classList.toggle('hidden', !isOwner);
+  if (isOwner) muatAkses();
+}
+
+function simpanSetting() {
+  localStorage.setItem('ct_webapp_url', document.getElementById('inputWebAppUrl').value.trim());
+  localStorage.setItem('ct_gemini_key', document.getElementById('inputGeminiKey').value.trim());
+  alert('Tersimpan');
+}
+
+async function muatAkses() {
+  const nama = localStorage.getItem('ct_nama');
+  const hasil = await callBackend({ action: 'getAkses', nama: nama });
+  if (hasil.error) return;
+  document.getElementById('listAkses').innerHTML = hasil.names.map(function (n) {
+    const isOwner = n.toLowerCase() === hasil.owner.toLowerCase();
+    return '<div class="flex justify-between items-center border-b py-2 text-sm">' +
+      '<span>' + n + (isOwner ? ' 👑' : '') + '</span>' +
+      (isOwner ? '' : '<button onclick="hapusAkses(\'' + n + '\')" class="text-red-500 text-xs">Hapus</button>') +
+      '</div>';
+  }).join('');
+}
+
+async function tambahAkses() {
+  const target = document.getElementById('inputNamaBaru').value.trim();
+  if (!target) return;
+  await callBackend({ action: 'kelolaAkses', nama: localStorage.getItem('ct_nama'), operation: 'add', targetNama: target });
+  document.getElementById('inputNamaBaru').value = '';
+  muatAkses();
+}
+
+async function hapusAkses(target) {
+  await callBackend({ action: 'kelolaAkses', nama: localStorage.getItem('ct_nama'), operation: 'remove', targetNama: target });
+  muatAkses();
+}
+</script>
+</body>
+</html>
