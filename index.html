@@ -227,14 +227,18 @@ function simpanSetup() {
 async function login() {
   const nama = document.getElementById('inputNama').value.trim();
   if (!nama) return;
-  const hasil = await callBackend({ action: 'login', nama: nama });
-  if (hasil.valid) {
-    localStorage.setItem('ct_nama', hasil.nama);
-    localStorage.setItem('ct_isowner', hasil.isOwner ? '1' : '0');
-    kategoriListCache = hasil.kategoriList || [];
-    masukKeApp();
-  } else {
-    document.getElementById('loginError').classList.remove('hidden');
+  try {
+    const hasil = await callBackend({ action: 'login', nama: nama });
+    if (hasil.valid) {
+      localStorage.setItem('ct_nama', hasil.nama);
+      localStorage.setItem('ct_isowner', hasil.isOwner ? '1' : '0');
+      kategoriListCache = hasil.kategoriList || [];
+      masukKeApp();
+    } else {
+      document.getElementById('loginError').classList.remove('hidden');
+    }
+  } catch (err) {
+    alert('Gagal nyambung ke backend: ' + err.message + '\n\nCek lagi Web App URL di layar Setup (Keluar dulu > buka Setting kalau udah kepalang masuk), pastikan udah "New version" pas deploy terakhir.');
   }
 }
 
