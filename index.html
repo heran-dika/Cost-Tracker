@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cost Tracker</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#111111">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; }
@@ -614,6 +616,12 @@ function copyLinkUndangan() {
 async function hapusAkses(target) {
   await callBackend({ action: 'kelolaAkses', nama: localStorage.getItem('ct_nama'), operation: 'remove', targetNama: target });
   muatAkses();
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js');
+  });
 }
 </script>
 </body>
