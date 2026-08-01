@@ -38,6 +38,16 @@
   <p id="loginError" class="text-red-500 text-sm mt-2 hidden">Nama nggak dikenali. Hubungi pemilik akun buat ditambahin.</p>
 </div>
 
+<!-- ===== LAYAR TERIMA UNDANGAN ===== -->
+<div id="layarUndangan" class="hidden max-w-sm mx-auto p-6 pt-24">
+  <h1 class="text-xl font-bold mb-1">Kamu diundang!</h1>
+  <p class="text-gray-500 text-sm mb-6">Masukin nama kamu buat gabung ke Cost Tracker</p>
+  <input id="inputNamaUndangan" type="text" placeholder="Nama"
+    class="w-full border rounded-lg px-4 py-3 mb-3">
+  <button onclick="terimaUndangan()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Gabung</button>
+  <p id="undanganError" class="text-red-500 text-sm mt-2 hidden"></p>
+</div>
+
 <!-- ===== APP UTAMA (4 tab) ===== -->
 <div id="appUtama" class="hidden max-w-sm mx-auto">
 
@@ -64,25 +74,11 @@
       <input id="inputToko" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
       <label class="text-xs text-gray-500">Tanggal</label>
       <input id="inputTanggal" type="date" class="w-full border rounded-lg px-3 py-2 mb-3">
-      <div class="flex gap-2 mb-3">
-        <div class="flex-1">
-          <label class="text-xs text-gray-500">Jenis</label>
-          <select id="inputJenis" class="w-full border rounded-lg px-3 py-2">
-            <option value="Bisnis">Bisnis</option>
-            <option value="Pribadi">Pribadi</option>
-          </select>
-        </div>
-        <div class="flex-1">
-          <label class="text-xs text-gray-500">Kategori</label>
-          <select id="inputKategori" onchange="cekTambahKategori()" class="w-full border rounded-lg px-3 py-2"></select>
-        </div>
-      </div>
-      <input id="inputKategoriBaru" type="text" placeholder="Nama kategori baru"
-        class="hidden w-full border rounded-lg px-3 py-2 mb-3">
+      <p class="text-xs text-gray-500 mb-2">Tiap item bisa dikategoriin sendiri-sendiri:</p>
       <div id="listItem" class="space-y-2 mb-4"></div>
       <div class="flex gap-2">
         <button onclick="batalReview()" class="flex-1 border rounded-xl py-3 font-medium">Batal</button>
-        <button onclick="simpanSemua()" class="flex-1 bg-black text-white rounded-xl py-3 font-medium">Simpan</button>
+        <button id="tombolSimpan" onclick="simpanSemua()" class="flex-1 bg-black text-white rounded-xl py-3 font-medium">Simpan</button>
       </div>
     </div>
   </div>
@@ -124,9 +120,11 @@
     <div id="bagianKelolaAkses" class="hidden">
       <h3 class="font-medium text-sm mb-2">Kelola Akses (Owner)</h3>
       <div id="listAkses" class="mb-3"></div>
-      <div class="flex gap-2">
-        <input id="inputNamaBaru" type="text" placeholder="Nama staff baru" class="flex-1 border rounded-lg px-3 py-2 text-sm">
-        <button onclick="tambahAkses()" class="bg-black text-white rounded-lg px-4">+</button>
+      <button onclick="buatUndangan()" class="w-full border border-gray-300 rounded-lg py-2 text-sm font-medium mb-2">+ Buat Link Undangan</button>
+      <div id="areaLinkUndangan" class="hidden">
+        <input id="linkUndangan" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-2 text-xs bg-gray-50">
+        <button onclick="copyLinkUndangan()" class="w-full bg-black text-white rounded-lg py-2 text-sm font-medium mb-2">Copy Link</button>
+        <p class="text-xs text-gray-400">Kirim link ini ke staff kamu. Setelah mereka masukin nama, refresh halaman ini buat lihat nama-nya udah masuk atau belum.</p>
       </div>
     </div>
   </div>
@@ -227,6 +225,17 @@ let katalogTokoCache = [];
 let hasilStruk = null;
 
 window.onload = function () {
+  const params = new URLSearchParams(location.search);
+  const inviteToken = params.get('invite');
+  const inviteWebapp = params.get('webapp');
+
+  if (inviteToken) {
+    if (inviteWebapp) localStorage.setItem('ct_webapp_url', inviteWebapp);
+    window._inviteToken = inviteToken;
+    document.getElementById('layarUndangan').classList.remove('hidden');
+    return;
+  }
+
   const webAppUrl = localStorage.getItem('ct_webapp_url');
   const geminiKey = localStorage.getItem('ct_gemini_key');
   const nama = localStorage.getItem('ct_nama');
@@ -239,6 +248,31 @@ window.onload = function () {
     masukKeApp();
   }
 };
+
+async function terimaUndangan() {
+  const nama = document.getElementById('inputNamaUndangan').value.trim();
+  if (!nama) return;
+  try {
+    const hasil = await callBackend({ action: 'pakaiUndangan', nama: nama, token: window._inviteToken });
+    if (hasil.valid) {
+      localStorage.setItem('ct_nama', hasil.nama);
+      localStorage.setItem('ct_isowner', '0');
+      kategoriListCache = hasil.kategoriList || [];
+      document.getElementById('layarUndangan').classList.add('hidden');
+      if (!localStorage.getItem('ct_gemini_key')) {
+        document.getElementById('setupWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
+        document.getElementById('layarSetup').classList.remove('hidden');
+      } else {
+        masukKeApp();
+      }
+    } else {
+      document.getElementById('undanganError').innerText = hasil.error || 'Undangan nggak valid';
+      document.getElementById('undanganError').classList.remove('hidden');
+    }
+  } catch (err) {
+    alert('Gagal nyambung: ' + err.message);
+  }
+}
 
 function simpanSetup() {
   const url = document.getElementById('setupWebAppUrl').value.trim();
@@ -298,6 +332,11 @@ function showTab(tab) {
 function fotoDipilih(event) {
   const file = event.target.files[0];
   if (!file) return;
+  if (!localStorage.getItem('ct_gemini_key')) {
+    alert('Gemini API key belum diisi — buka tab Setting dulu buat isi itu.');
+    event.target.value = '';
+    return;
+  }
   document.getElementById('statusProses').classList.remove('hidden');
 
   const reader = new FileReader();
@@ -324,31 +363,53 @@ function tampilkanReview(hasil) {
   document.getElementById('areaCapture').classList.add('hidden');
   document.getElementById('areaReview').classList.remove('hidden');
 
-  document.getElementById('inputToko').value = hasil.toko_raw || '';
+  document.getElementById('inputToko').value = cariNamaToko(hasil.toko_match_id) || hasil.toko_raw || '';
   document.getElementById('inputTanggal').value = hasil.tanggal || new Date().toISOString().slice(0, 10);
 
-  const selKategori = document.getElementById('inputKategori');
-  selKategori.innerHTML = kategoriListCache.map(function (k) { return '<option value="' + k + '">' + k + '</option>'; }).join('')
-    + '<option value="__baru__">+ Tambah kategori baru</option>';
-
   document.getElementById('listItem').innerHTML = (hasil.items || []).map(function (item, i) {
+    const namaTampil = cariNamaProduk(item.produk_match_id) || item.nama_raw || '';
     return '<div class="border rounded-lg p-3 bg-white">' +
-      '<input data-i="' + i + '" data-field="nama_raw" value="' + (item.nama_raw || '') + '" class="w-full font-medium mb-2 border-b pb-1">' +
-      '<div class="flex gap-2 text-sm">' +
+      '<input data-i="' + i + '" data-field="nama_produk" value="' + namaTampil + '" placeholder="Nama produk lengkap" class="w-full font-medium mb-1 border-b pb-1">' +
+      '<p class="text-xs text-gray-400 mb-2">Di struk: ' + (item.nama_raw || '-') + '</p>' +
+      '<div class="flex gap-2 text-sm mb-2">' +
       '<input data-i="' + i + '" data-field="qty" type="number" value="' + (item.qty || 1) + '" class="w-16 border rounded px-2 py-1" placeholder="Qty">' +
       '<input data-i="' + i + '" data-field="satuan" value="' + (item.satuan || 'pcs') + '" class="w-20 border rounded px-2 py-1" placeholder="Satuan">' +
       '<input data-i="' + i + '" data-field="harga_total" type="number" value="' + (item.harga_total || 0) + '" class="flex-1 border rounded px-2 py-1" placeholder="Harga total">' +
       '</div>' +
+      '<div class="flex gap-2 text-sm">' +
+      '<select data-i="' + i + '" data-field="jenis" class="flex-1 border rounded px-2 py-1"><option value="Bisnis">Bisnis</option><option value="Pribadi">Pribadi</option></select>' +
+      '<select data-i="' + i + '" data-field="kategori" onchange="cekTambahKategori(' + i + ')" class="flex-1 border rounded px-2 py-1">' + opsiKategoriHtml('Bahan Baku') + '</select>' +
+      '</div>' +
+      '<input data-i="' + i + '" data-field="kategoriBaru" type="text" placeholder="Nama kategori baru" class="hidden w-full border rounded px-2 py-1 mt-2">' +
       (item.produk_match_id
         ? '<p class="text-xs text-green-600 mt-1">✓ Cocok dengan katalog</p>'
-        : '<p class="text-xs text-orange-500 mt-1">Produk baru — bakal ditambah ke katalog</p>') +
+        : '<p class="text-xs text-orange-500 mt-1">Produk baru — nama di atas bakal ditambah ke katalog</p>') +
       '</div>';
   }).join('');
 }
 
-function cekTambahKategori() {
-  const val = document.getElementById('inputKategori').value;
-  document.getElementById('inputKategoriBaru').classList.toggle('hidden', val !== '__baru__');
+function opsiKategoriHtml(defaultVal) {
+  return kategoriListCache.map(function (k) {
+    return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
+  }).join('') + '<option value="__baru__">+ Kategori baru</option>';
+}
+
+function cariNamaProduk(id) {
+  if (!id) return null;
+  const p = katalogProdukCache.find(function (x) { return x['ID Produk'] === id; });
+  return p ? p['Nama Kanonik'] : null;
+}
+
+function cariNamaToko(id) {
+  if (!id) return null;
+  const t = katalogTokoCache.find(function (x) { return x['ID Toko'] === id; });
+  return t ? t['Nama Kanonik Cabang'] : null;
+}
+
+function cekTambahKategori(i) {
+  const sel = document.querySelector('[data-i="' + i + '"][data-field="kategori"]');
+  const inputBaru = document.querySelector('[data-i="' + i + '"][data-field="kategoriBaru"]');
+  inputBaru.classList.toggle('hidden', sel.value !== '__baru__');
 }
 
 function batalReview() {
@@ -357,41 +418,69 @@ function batalReview() {
 }
 
 async function simpanSemua() {
-  const toko = document.getElementById('inputToko').value;
-  const tanggal = document.getElementById('inputTanggal').value;
-  const jenis = document.getElementById('inputJenis').value;
-  let kategori = document.getElementById('inputKategori').value;
-  if (kategori === '__baru__') {
-    kategori = document.getElementById('inputKategoriBaru').value.trim();
-    if (!kategori) { alert('Isi nama kategori baru dulu'); return; }
-  }
+  const tombol = document.getElementById('tombolSimpan');
+  tombol.disabled = true;
+  tombol.innerText = 'Menyimpan...';
 
-  const nama = localStorage.getItem('ct_nama');
-  const device = getDevice();
-  const itemEls = document.querySelectorAll('#listItem [data-field]');
-  const items = {};
-  itemEls.forEach(function (el) {
-    const i = el.dataset.i;
-    items[i] = items[i] || {};
-    items[i][el.dataset.field] = el.value;
-  });
+  try {
+    const tokoNama = document.getElementById('inputToko').value.trim();
 
-  for (const i in items) {
-    const it = items[i];
-    const matchId = ((hasilStruk.items || [])[i] || {}).produk_match_id || '';
-    await callBackend({
-      action: 'simpanPengeluaran',
-      nama: nama, device: device, jenis: jenis,
-      idToko: hasilStruk.toko_match_id || '', tokoRaw: toko,
-      kategori: kategori,
-      idProduk: matchId, itemRaw: it.nama_raw,
-      qty: it.qty, satuan: it.satuan, hargaTotal: it.harga_total,
-      status: 'Manual'
+    const hasilToko = await callBackend({
+      action: 'simpanToko',
+      idToko: hasilStruk.toko_match_id || '',
+      namaKanonik: tokoNama,
+      aliasBaru: hasilStruk.toko_raw || ''
     });
-  }
+    const idToko = hasilToko.idToko || '';
 
-  alert('Tersimpan!');
-  batalReview();
+    const nama = localStorage.getItem('ct_nama');
+    const device = getDevice();
+    const itemEls = document.querySelectorAll('#listItem [data-field]');
+    const items = {};
+    itemEls.forEach(function (el) {
+      const i = el.dataset.i;
+      items[i] = items[i] || {};
+      items[i][el.dataset.field] = el.value;
+    });
+
+    for (const i in items) {
+      const it = items[i];
+      let kategori = it.kategori;
+      if (kategori === '__baru__') {
+        kategori = (it.kategoriBaru || '').trim() || 'Lain-lain';
+      }
+
+      const asli = (hasilStruk.items || [])[i] || {};
+
+      const hasilProduk = await callBackend({
+        action: 'simpanProduk',
+        idProduk: asli.produk_match_id || '',
+        namaKanonik: it.nama_produk,
+        satuan: it.satuan,
+        aliasBaru: asli.nama_raw || '',
+        kategoriDefault: kategori
+      });
+      const idProduk = hasilProduk.idProduk || '';
+
+      await callBackend({
+        action: 'simpanPengeluaran',
+        nama: nama, device: device, jenis: it.jenis,
+        idToko: idToko, tokoRaw: tokoNama,
+        kategori: kategori,
+        idProduk: idProduk, itemRaw: asli.nama_raw || '',
+        qty: it.qty, satuan: it.satuan, hargaTotal: it.harga_total,
+        status: 'Manual'
+      });
+    }
+
+    alert('Tersimpan!');
+    batalReview();
+  } catch (err) {
+    alert('Gagal simpan: ' + err.message);
+  } finally {
+    tombol.disabled = false;
+    tombol.innerText = 'Simpan';
+  }
 }
 
 // ==== TAB RIWAYAT ====
@@ -503,12 +592,23 @@ async function muatAkses() {
   }).join('');
 }
 
-async function tambahAkses() {
-  const target = document.getElementById('inputNamaBaru').value.trim();
-  if (!target) return;
-  await callBackend({ action: 'kelolaAkses', nama: localStorage.getItem('ct_nama'), operation: 'add', targetNama: target });
-  document.getElementById('inputNamaBaru').value = '';
-  muatAkses();
+async function buatUndangan() {
+  const hasil = await callBackend({ action: 'buatUndangan', nama: localStorage.getItem('ct_nama') });
+  if (hasil.error) { alert(hasil.error); return; }
+  const webAppUrl = localStorage.getItem('ct_webapp_url');
+  const link = location.origin + location.pathname + '?invite=' + hasil.token + '&webapp=' + encodeURIComponent(webAppUrl);
+  document.getElementById('linkUndangan').value = link;
+  document.getElementById('areaLinkUndangan').classList.remove('hidden');
+}
+
+function copyLinkUndangan() {
+  const input = document.getElementById('linkUndangan');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(function () {
+    alert('Link ke-copy!');
+  }).catch(function () {
+    alert('Gagal copy otomatis — select teksnya manual terus copy');
+  });
 }
 
 async function hapusAkses(target) {
