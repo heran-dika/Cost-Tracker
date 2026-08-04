@@ -529,14 +529,20 @@ function hitungAkumulasi() {
 
 // ==== TAB KATALOG ====
 async function muatKatalog() {
-  const hasil = await callBackend({ action: 'getKatalog' });
-  katalogProdukCache = hasil.produk || [];
-  katalogTokoCache = hasil.toko || [];
-  if (dataPengeluaran.length === 0) {
-    const r = await callBackend({ action: 'getPengeluaran' });
-    dataPengeluaran = r.rows || [];
+  try {
+    const hasil = await callBackend({ action: 'getKatalog' });
+    if (hasil.error) { alert('Gagal muat katalog: ' + hasil.error); return; }
+    katalogProdukCache = hasil.produk || [];
+    katalogTokoCache = hasil.toko || [];
+    if (dataPengeluaran.length === 0) {
+      const r = await callBackend({ action: 'getPengeluaran' });
+      if (r.error) { alert('Gagal muat riwayat: ' + r.error); return; }
+      dataPengeluaran = r.rows || [];
+    }
+    renderKatalog();
+  } catch (err) {
+    alert('Gagal muat katalog: ' + err.message);
   }
-  renderKatalog();
 }
 
 function renderKatalog() {
@@ -595,12 +601,16 @@ async function muatAkses() {
 }
 
 async function buatUndangan() {
-  const hasil = await callBackend({ action: 'buatUndangan', nama: localStorage.getItem('ct_nama') });
-  if (hasil.error) { alert(hasil.error); return; }
-  const webAppUrl = localStorage.getItem('ct_webapp_url');
-  const link = location.origin + location.pathname + '?invite=' + hasil.token + '&webapp=' + encodeURIComponent(webAppUrl);
-  document.getElementById('linkUndangan').value = link;
-  document.getElementById('areaLinkUndangan').classList.remove('hidden');
+  try {
+    const hasil = await callBackend({ action: 'buatUndangan', nama: localStorage.getItem('ct_nama') });
+    if (hasil.error) { alert(hasil.error); return; }
+    const webAppUrl = localStorage.getItem('ct_webapp_url');
+    const link = location.origin + location.pathname + '?invite=' + hasil.token + '&webapp=' + encodeURIComponent(webAppUrl);
+    document.getElementById('linkUndangan').value = link;
+    document.getElementById('areaLinkUndangan').classList.remove('hidden');
+  } catch (err) {
+    alert('Gagal bikin link undangan: ' + err.message);
+  }
 }
 
 function copyLinkUndangan() {
