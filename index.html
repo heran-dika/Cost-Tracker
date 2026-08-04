@@ -7,6 +7,7 @@
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#111111">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+<script src="https://unpkg.com/@zxing/library@0.21.3"></script>
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; }
   .hidden { display: none !important; }
@@ -31,7 +32,7 @@
   <input id="setupGroqKey" type="text" placeholder="API key dari console.groq.com"
     class="w-full border rounded-lg px-4 py-3 mb-4 text-sm">
 
-  <button onclick="simpanSetup()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Lanjut</button>
+  <button onclick="jalankanSekali(this, 'Memproses...', simpanSetup)" class="w-full bg-black text-white rounded-lg py-3 font-medium">Lanjut</button>
 </div>
 
 <!-- ===== LAYAR LOGIN ===== -->
@@ -40,7 +41,7 @@
   <p class="text-gray-500 text-sm mb-6">Masukin nama kamu</p>
   <input id="inputNama" type="text" placeholder="Nama"
     class="w-full border rounded-lg px-4 py-3 mb-3">
-  <button onclick="login()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Masuk</button>
+  <button onclick="jalankanSekali(this, 'Masuk...', login)" class="w-full bg-black text-white rounded-lg py-3 font-medium">Masuk</button>
   <p id="loginError" class="text-red-500 text-sm mt-2 hidden">Nama nggak dikenali. Hubungi pemilik akun buat ditambahin.</p>
 </div>
 
@@ -50,16 +51,19 @@
   <p class="text-gray-500 text-sm mb-6">Masukin nama kamu buat gabung ke Cost Tracker</p>
   <input id="inputNamaUndangan" type="text" placeholder="Nama"
     class="w-full border rounded-lg px-4 py-3 mb-3">
-  <button onclick="terimaUndangan()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Gabung</button>
+  <button onclick="jalankanSekali(this, 'Memproses...', terimaUndangan)" class="w-full bg-black text-white rounded-lg py-3 font-medium">Gabung</button>
   <p id="undanganError" class="text-red-500 text-sm mt-2 hidden"></p>
 </div>
 
-<!-- ===== APP UTAMA (4 tab) ===== -->
-<div id="appUtama" class="hidden max-w-sm mx-auto">
+<!-- ===== APP UTAMA ===== -->
+<div id="appUtama" class="hidden max-w-sm mx-auto relative">
 
-  <div class="flex justify-between items-center p-4 border-b bg-white sticky top-0">
+  <div class="flex justify-between items-center p-4 border-b bg-white sticky top-0 z-10">
     <p class="text-gray-500 text-sm">Halo, <span id="namaUser" class="font-medium text-black"></span></p>
-    <button onclick="logout()" class="text-xs text-gray-400">Keluar</button>
+    <div class="flex items-center gap-3">
+      <button onclick="bukaLayarSetting()" class="text-lg text-gray-400" title="Pengaturan">⚙️</button>
+      <button onclick="logout()" class="text-xs text-gray-400">Keluar</button>
+    </div>
   </div>
 
   <!-- TAB: INPUT -->
@@ -78,7 +82,7 @@
 
     <div id="areaReview" class="hidden">
       <h2 class="font-bold mb-3">Review Pengeluaran</h2>
-      <label class="text-xs text-gray-500">Toko</label>
+      <label class="text-xs text-gray-500">Toko *</label>
       <input id="inputToko" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
 
       <label class="text-xs text-gray-500">Tanggal & Jam</label>
@@ -92,7 +96,7 @@
       <label class="text-xs text-gray-500">No. Transaksi (opsional, kalau ada di struk)</label>
       <input id="inputIdTransaksi" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
 
-      <p class="text-xs text-gray-500 mb-2">Tiap item bisa dikategoriin sendiri-sendiri:</p>
+      <p class="text-xs text-gray-500 mb-2">Tiap item bisa dikategoriin sendiri-sendiri. Nama barang * wajib pakai nama LENGKAP (bukan singkatan struk):</p>
       <div id="listItem" class="space-y-2 mb-3"></div>
       <button id="tombolTambahItem" onclick="tambahItemManual()" class="hidden w-full border border-dashed rounded-lg py-2 text-sm text-gray-500 mb-3">+ Tambah Item</button>
       <div class="flex gap-2">
@@ -119,43 +123,65 @@
     <div id="listStruk"></div>
   </div>
 
-  <!-- TAB: KATALOG -->
-  <div id="tabKatalog" class="hidden p-4 pb-20">
-    <h3 class="font-medium text-sm mb-2">Produk — harga termurah di atas</h3>
-    <div id="listProduk" class="mb-6"></div>
-    <h3 class="font-medium text-sm mb-2">Toko</h3>
-    <div id="listToko"></div>
+  <!-- TAB: PRODUK -->
+  <div id="tabProduk" class="hidden p-4 pb-20">
+    <input type="text" placeholder="🔍 Cari produk..." oninput="cariProduk(this.value)" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
+    <div id="listProduk"></div>
   </div>
 
-  <!-- TAB: SETTING -->
-  <div id="tabSetting" class="hidden p-4 pb-20">
-    <h3 class="font-medium text-sm mb-2">Koneksi</h3>
-    <label class="text-xs text-gray-500">Web App URL</label>
-    <input id="inputWebAppUrl" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
-    <label class="text-xs text-gray-500">Gemini API Key</label>
-    <input id="inputGeminiKey" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
-    <label class="text-xs text-gray-500">Groq API Key (opsional — cadangan kalau Gemini lagi penuh)</label>
-    <input id="inputGroqKey" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
-    <button onclick="simpanSetting()" class="w-full bg-black text-white rounded-lg py-2 font-medium mb-6">Simpan</button>
-
-    <div id="bagianKelolaAkses" class="hidden">
-      <h3 class="font-medium text-sm mb-2">Kelola Akses (Owner)</h3>
-      <div id="listAkses" class="mb-3"></div>
-      <button onclick="buatUndangan()" class="w-full border border-gray-300 rounded-lg py-2 text-sm font-medium mb-2">+ Buat Link Undangan</button>
-      <div id="areaLinkUndangan" class="hidden">
-        <input id="linkUndangan" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-2 text-xs bg-gray-50">
-        <button onclick="copyLinkUndangan()" class="w-full bg-black text-white rounded-lg py-2 text-sm font-medium mb-2">Copy Link</button>
-        <p class="text-xs text-gray-400">Kirim link ini ke staff kamu. Setelah mereka masukin nama, refresh halaman ini buat lihat nama-nya udah masuk atau belum.</p>
-      </div>
-    </div>
+  <!-- TAB: TOKO -->
+  <div id="tabToko" class="hidden p-4 pb-20">
+    <input type="text" placeholder="🔍 Cari toko..." oninput="cariToko(this.value)" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
+    <div id="listToko"></div>
   </div>
 
   <!-- BOTTOM NAV -->
   <div class="fixed bottom-0 left-0 right-0 bg-white border-t flex max-w-sm mx-auto">
     <button id="navInput" onclick="showTab('Input')" class="flex-1 py-3 text-center text-xs text-black">📷<br>Input</button>
     <button id="navRiwayat" onclick="showTab('Riwayat')" class="flex-1 py-3 text-center text-xs text-gray-400">📋<br>Riwayat</button>
-    <button id="navKatalog" onclick="showTab('Katalog')" class="flex-1 py-3 text-center text-xs text-gray-400">📦<br>Katalog</button>
-    <button id="navSetting" onclick="showTab('Setting')" class="flex-1 py-3 text-center text-xs text-gray-400">⚙️<br>Setting</button>
+    <button id="navProduk" onclick="showTab('Produk')" class="flex-1 py-3 text-center text-xs text-gray-400">📦<br>Produk</button>
+    <button id="navToko" onclick="showTab('Toko')" class="flex-1 py-3 text-center text-xs text-gray-400">🏬<br>Toko</button>
+  </div>
+
+  <!-- ===== OVERLAY: SETTING ===== -->
+  <div id="layarSettingOverlay" class="hidden fixed inset-0 bg-white z-20 max-w-sm mx-auto overflow-y-auto">
+    <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+      <h2 class="font-bold">Pengaturan</h2>
+      <button onclick="tutupLayarSetting()" class="text-gray-400 text-xl leading-none">✕</button>
+    </div>
+    <div class="p-4">
+      <h3 class="font-medium text-sm mb-2">Koneksi</h3>
+      <label class="text-xs text-gray-500">Web App URL</label>
+      <input id="inputWebAppUrl" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-3 text-sm bg-gray-50">
+      <label class="text-xs text-gray-500">Gemini API Key</label>
+      <input id="inputGeminiKey" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-3 text-sm bg-gray-50">
+      <label class="text-xs text-gray-500">Groq API Key (opsional — cadangan kalau Gemini lagi penuh)</label>
+      <input id="inputGroqKey" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-3 text-sm bg-gray-50">
+      <div class="flex gap-2 mb-6">
+        <button id="tombolEditSetting" onclick="editSetting()" class="flex-1 border rounded-lg py-2 text-sm font-medium">Edit</button>
+        <button id="tombolSimpanSetting" onclick="simpanSetting()" class="hidden flex-1 bg-black text-white rounded-lg py-2 text-sm font-medium">Simpan</button>
+      </div>
+
+      <div id="bagianKelolaAkses" class="hidden">
+        <h3 class="font-medium text-sm mb-2">Kelola Akses (Owner)</h3>
+        <div id="listAkses" class="mb-3"></div>
+        <button onclick="jalankanSekali(this, 'Membuat...', buatUndangan)" class="w-full border border-gray-300 rounded-lg py-2 text-sm font-medium mb-2">+ Buat Link Undangan</button>
+        <div id="areaLinkUndangan" class="hidden">
+          <input id="linkUndangan" type="text" readonly class="w-full border rounded-lg px-3 py-2 mb-2 text-xs bg-gray-50">
+          <button onclick="copyLinkUndangan()" class="w-full bg-black text-white rounded-lg py-2 text-sm font-medium mb-2">Copy Link</button>
+          <p class="text-xs text-gray-400">Kirim link ini ke staff kamu. Setelah mereka masukin nama, refresh halaman ini buat lihat nama-nya udah masuk atau belum.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== OVERLAY: SCAN BARCODE ===== -->
+  <div id="layarScanBarcode" class="hidden fixed inset-0 bg-black z-30 max-w-sm mx-auto flex flex-col">
+    <div class="flex justify-between items-center p-4 text-white">
+      <p class="text-sm">Arahkan kamera ke barcode</p>
+      <button onclick="tutupScanBarcode()" class="text-white text-xl leading-none">✕</button>
+    </div>
+    <video id="videoScanBarcode" class="flex-1 w-full" style="object-fit: cover;"></video>
   </div>
 </div>
 
@@ -167,6 +193,18 @@ function getDevice() {
   let d = localStorage.getItem('ct_device');
   if (!d) { d = 'Device-' + Math.random().toString(36).slice(2, 6).toUpperCase(); localStorage.setItem('ct_device', d); }
   return d;
+}
+
+// Cegah tombol kepencet 2x — disable + ganti teks selama fn() masih jalan.
+function jalankanSekali(tombol, teksProses, fn) {
+  if (tombol.disabled) return;
+  const teksAsli = tombol.innerHTML;
+  tombol.disabled = true;
+  tombol.innerText = teksProses;
+  Promise.resolve().then(fn).catch(function (err) { console.error(err); }).finally(function () {
+    tombol.disabled = false;
+    tombol.innerHTML = teksAsli;
+  });
 }
 
 let jsonpCounter = 0;
@@ -257,10 +295,13 @@ async function panggilGroq(base64Image, mimeType, katalogProduk, katalogToko) {
 function buildPrompt(katalogProduk, katalogToko) {
   return [
     'Kamu membaca struk belanja Indonesia (minimarket/toko kelontong/SPBU). Baca gambar struk dan keluarkan HANYA JSON (tanpa markdown, tanpa penjelasan) dengan struktur persis ini:',
-    '{"toko_raw": string, "toko_match_id": string atau null, "tanggal": "YYYY-MM-DD", "jam": "HH:MM" atau null, "id_transaksi": string atau null, "items": [{"nama_raw": string, "produk_match_id": string atau null, "qty": number, "satuan": string, "harga_total": number}], "total": number}',
+    '{"toko_raw": string, "toko_match_id": string atau null, "tanggal": "YYYY-MM-DD", "jam": "HH:MM" atau null, "id_transaksi": string atau null, "items": [{"nama_raw": string, "nama_lengkap_perkiraan": string, "produk_match_id": string atau null, "qty": number, "satuan": string, "harga_total": number}], "total": number}',
     '',
-    'Field "jam" diambil dari jam transaksi yang tercetak di struk (biasanya deket tanggal atau di footer). Kalau nggak ketemu sama sekali, isi null — jangan mengarang.',
-    'Field "id_transaksi" diambil dari nomor struk/nomor transaksi dari mesin kasir (biasanya "No. Transaksi", "Trans#", "Receipt No", dsb). Kalau nggak ada, isi null.',
+    'Field "nama_raw" diisi PERSIS seperti tertulis di struk (biasanya disingkat, misal "GENTLE GEN MR.BRZ360").',
+    'Field "nama_lengkap_perkiraan" diisi nama produk LENGKAP hasil tebakan kamu dari singkatan itu, pakai pengetahuan umum soal produk yang lazim dijual di minimarket/toko kelontong Indonesia (misal singkatan sabun/shampo/kecap yang gampang dikenali mereknya). Kalau beneran nggak bisa ditebak, isi sama persis kayak nama_raw — jangan mengarang nama yang nggak masuk akal.',
+    '',
+    'Field "jam" diambil dari jam transaksi yang tercetak di struk. Kalau nggak ketemu sama sekali, isi null — jangan mengarang.',
+    'Field "id_transaksi" diambil dari nomor struk/nomor transaksi dari mesin kasir. Kalau nggak ada, isi null.',
     '',
     'Katalog Toko yang sudah ada — cocokkan toko_raw ke salah satu "ID Toko" kalau cabang yang sama, isi toko_match_id dengan ID itu, kalau tidak ada yang cocok isi null:',
     JSON.stringify(katalogToko),
@@ -354,7 +395,7 @@ async function login() {
       document.getElementById('loginError').classList.remove('hidden');
     }
   } catch (err) {
-    alert('Gagal nyambung ke backend: ' + err.message + '\n\nCek lagi Web App URL di layar Setup (Keluar dulu > buka Setting kalau udah kepalang masuk), pastikan udah "New version" pas deploy terakhir.');
+    alert('Gagal nyambung ke backend: ' + err.message + '\n\nCek lagi Web App URL di Pengaturan (ikon ⚙️).');
   }
 }
 
@@ -374,14 +415,14 @@ function masukKeApp() {
 
 // ==== NAVIGASI TAB ====
 function showTab(tab) {
-  ['Input', 'Riwayat', 'Katalog', 'Setting'].forEach(function (t) {
+  ['Input', 'Riwayat', 'Produk', 'Toko'].forEach(function (t) {
     document.getElementById('tab' + t).classList.toggle('hidden', t !== tab);
     document.getElementById('nav' + t).classList.toggle('text-black', t === tab);
     document.getElementById('nav' + t).classList.toggle('text-gray-400', t !== tab);
   });
   if (tab === 'Riwayat') muatRiwayat();
-  if (tab === 'Katalog') muatKatalog();
-  if (tab === 'Setting') bukaSetting();
+  if (tab === 'Produk') bukaTabProduk();
+  if (tab === 'Toko') bukaTabToko();
 }
 
 // ==== TAB INPUT — jalur Foto/OCR ====
@@ -389,7 +430,7 @@ function fotoDipilih(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!localStorage.getItem('ct_gemini_key')) {
-    alert('Gemini API key belum diisi — buka tab Setting dulu buat isi itu.');
+    alert('Gemini API key belum diisi — buka Pengaturan (⚙️) dulu buat isi itu.');
     event.target.value = '';
     return;
   }
@@ -411,7 +452,6 @@ function fotoDipilih(event) {
         hasil = await panggilGemini(base64, file.type, katalogProdukCache, katalogTokoCache);
         providerDipakai = 'Gemini';
       } catch (errGemini) {
-        // Gemini gagal (limit/overload/dll) — otomatis coba Groq kalau key-nya ada.
         if (!localStorage.getItem('ct_groq_key')) throw errGemini;
         statusEl.innerText = 'Gemini lagi sibuk, coba provider cadangan (Groq)...';
         hasil = await panggilGroq(base64, file.type, katalogProdukCache, katalogTokoCache);
@@ -435,16 +475,16 @@ function mulaiInputManual() {
   tampilkanReview({
     toko_raw: '', toko_match_id: null,
     tanggal: new Date().toISOString().slice(0, 10), jam: null, id_transaksi: null,
-    items: [{ nama_raw: '', produk_match_id: null, qty: 1, satuan: 'pcs', harga_total: 0 }]
+    items: [{ nama_raw: '', nama_lengkap_perkiraan: '', produk_match_id: null, qty: 1, satuan: 'pcs', harga_total: 0 }]
   });
 }
 
 function tambahItemManual() {
-  hasilStruk.items.push({ nama_raw: '', produk_match_id: null, qty: 1, satuan: 'pcs', harga_total: 0 });
+  hasilStruk.items.push({ nama_raw: '', nama_lengkap_perkiraan: '', produk_match_id: null, qty: 1, satuan: 'pcs', harga_total: 0 });
   tampilkanReview(hasilStruk);
 }
 
-// ==== LAYAR REVIEW (dipake sama-sama sama jalur Foto & Manual) ====
+// ==== LAYAR REVIEW ====
 function tampilkanReview(hasil, providerDipakai) {
   hasilStruk = hasil;
   document.getElementById('areaCapture').classList.add('hidden');
@@ -455,16 +495,14 @@ function tampilkanReview(hasil, providerDipakai) {
   document.getElementById('inputTanggal').value = hasil.tanggal || new Date().toISOString().slice(0, 10);
   document.getElementById('inputIdTransaksi').value = hasil.id_transaksi || '';
 
-  // Jam nggak kebaca dari OCR (dan bukan mode manual) -> prefill jam sekarang sebagai perkiraan,
-  // kasih badge minta dikonfirmasi user.
   const jamPerkiraan = !hasil.jam && !modeManual;
   document.getElementById('inputJam').value = hasil.jam || (jamPerkiraan ? new Date().toTimeString().slice(0, 5) : '');
   document.getElementById('labelJamPerkiraan').classList.toggle('hidden', !jamPerkiraan);
 
   document.getElementById('listItem').innerHTML = (hasil.items || []).map(function (item, i) {
-    const namaTampil = cariNamaProduk(item.produk_match_id) || item.nama_raw || '';
+    const namaTampil = cariNamaProduk(item.produk_match_id) || item.nama_lengkap_perkiraan || item.nama_raw || '';
     return '<div class="border rounded-lg p-3 bg-white">' +
-      '<input data-i="' + i + '" data-field="nama_produk" value="' + namaTampil + '" placeholder="Nama produk lengkap" class="w-full font-medium mb-1 border-b pb-1">' +
+      '<input data-i="' + i + '" data-field="nama_produk" value="' + namaTampil + '" placeholder="Nama produk LENGKAP (bukan singkatan struk)" class="w-full font-medium mb-1 border-b pb-1">' +
       (item.nama_raw ? '<p class="text-xs text-gray-400 mb-2">Di struk: ' + item.nama_raw + '</p>' : '') +
       '<div class="flex gap-2 text-sm mb-2">' +
       '<input data-i="' + i + '" data-field="qty" type="number" value="' + (item.qty || 1) + '" class="w-16 border rounded px-2 py-1" placeholder="Qty">' +
@@ -489,6 +527,12 @@ function opsiKategoriHtml(defaultVal) {
   return kategoriListCache.map(function (k) {
     return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
   }).join('') + '<option value="__baru__">+ Kategori baru</option>';
+}
+
+function opsiKategoriHtmlPolos(defaultVal) {
+  return kategoriListCache.map(function (k) {
+    return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
+  }).join('');
 }
 
 function cariNamaProduk(id) {
@@ -517,14 +561,18 @@ function batalReview() {
 
 async function simpanSemua() {
   const tombol = document.getElementById('tombolSimpan');
+  if (tombol.disabled) return;
   tombol.disabled = true;
   tombol.innerText = 'Mengecek...';
 
   try {
     const tokoNama = document.getElementById('inputToko').value.trim();
-    const tanggal = document.getElementById('inputTanggal').value;
+    let tanggal = document.getElementById('inputTanggal').value;
+    if (!tanggal) tanggal = new Date().toISOString().slice(0, 10); // default hari ini kalau dikosongin
     const jam = document.getElementById('inputJam').value;
     const idTransaksi = document.getElementById('inputIdTransaksi').value.trim();
+
+    if (!tokoNama) { alert('Toko wajib diisi'); return; }
 
     const itemEls = document.querySelectorAll('#listItem [data-field]');
     const items = {};
@@ -534,9 +582,15 @@ async function simpanSemua() {
       items[i][el.dataset.field] = el.value;
     });
 
+    for (const i in items) {
+      const it = items[i];
+      if (!it.nama_produk || !it.nama_produk.trim()) { alert('Nama barang di salah satu item masih kosong'); return; }
+      if (!it.harga_total || Number(it.harga_total) <= 0) { alert('Harga di salah satu item masih kosong/0'); return; }
+      if (!it.qty || Number(it.qty) <= 0) { alert('Qty di salah satu item masih kosong/0'); return; }
+    }
+
     const totalStruk = Object.keys(items).reduce(function (s, i) { return s + (Number(items[i].harga_total) || 0); }, 0);
 
-    // Cek duplikat dulu sebelum beneran simpan
     const cekDup = await callBackend({
       action: 'cekDuplikat',
       idToko: hasilStruk.toko_match_id || '',
@@ -545,7 +599,7 @@ async function simpanSemua() {
     });
     if (cekDup.match) {
       const lanjut = confirm('Struk ini kayaknya udah pernah diinput sebelumnya (cocok level ' + cekDup.tier + ') — tetap simpan?');
-      if (!lanjut) { tombol.disabled = false; tombol.innerText = 'Simpan'; return; }
+      if (!lanjut) { return; }
     }
 
     tombol.innerText = 'Menyimpan...';
@@ -690,9 +744,16 @@ function hitungAkumulasi() {
   document.getElementById('totalAkumulasi').innerText = formatRupiah(total);
 }
 
-// Form edit 2-level: header struk (berlaku ke semua item) + per-item.
-// Catatan: dropdown kategori di sini nggak punya opsi "+ kategori baru" (itu cuma ada
-// di layar Input) — kalau butuh kategori baru pas edit, tambahin dulu lewat Input lalu balik ke sini.
+function opsiProdukHtml(idTerpilih) {
+  let html = '<option value="">— Nggak terhubung ke katalog —</option>';
+  html += katalogProdukCache.map(function (p) {
+    return '<option value="' + p['ID Produk'] + '"' + (p['ID Produk'] === idTerpilih ? ' selected' : '') + '>' + p['Nama Kanonik'] + '</option>';
+  }).join('');
+  return html;
+}
+
+// Form edit 2-level: header struk (berlaku ke semua item) + per-item, termasuk
+// dropdown buat nge-connect/ganti item ke produk katalog yang udah ada.
 function formEditStruk(g) {
   const idPrefix = g.idStruk;
   let html = '<div class="mb-3 pb-3 border-b">' +
@@ -703,13 +764,15 @@ function formEditStruk(g) {
     '<input id="edJam-' + idPrefix + '" type="time" value="' + (g.jam || '') + '" class="w-24 border rounded px-2 py-1 text-sm">' +
     '</div>' +
     '<input id="edIdTransaksi-' + idPrefix + '" value="' + (g.idTransaksi || '') + '" placeholder="ID Transaksi (opsional)" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
-    '<button onclick="simpanEditHeader(\'' + idPrefix + '\')" class="text-xs bg-black text-white rounded px-3 py-1">Simpan Data Struk</button>' +
+    '<button onclick="jalankanSekali(this, \'Menyimpan...\', function(){return simpanEditHeader(\'' + idPrefix + '\');})" class="text-xs bg-black text-white rounded px-3 py-1">Simpan Data Struk</button>' +
   '</div>';
 
   html += g.items.map(function (r) {
     const idItem = r['ID Item'];
     return '<div class="mb-2 pb-2 border-b last:border-0">' +
       '<input id="edNama-' + idItem + '" value="' + (r['Item'] || '') + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
+      '<label class="text-xs text-gray-400">Terhubung ke produk katalog:</label>' +
+      '<select id="edProdukLink-' + idItem + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' + opsiProdukHtml(r['ID Produk']) + '</select>' +
       '<div class="flex gap-1 mb-1 text-sm">' +
       '<input id="edQty-' + idItem + '" type="number" value="' + r['Qty'] + '" class="w-14 border rounded px-1 py-1">' +
       '<input id="edSatuan-' + idItem + '" value="' + (r['Satuan'] || '') + '" class="w-16 border rounded px-1 py-1">' +
@@ -722,19 +785,12 @@ function formEditStruk(g) {
       '</select>' +
       '<select id="edKategori-' + idItem + '" class="flex-1 border rounded px-1 py-1">' + opsiKategoriHtmlPolos(r['Kategori']) + '</select>' +
       '</div>' +
-      '<button onclick="simpanEditItem(\'' + idItem + '\')" class="text-xs bg-black text-white rounded px-3 py-1">Simpan Item</button>' +
+      '<button onclick="jalankanSekali(this, \'Menyimpan...\', function(){return simpanEditItem(\'' + idItem + '\');})" class="text-xs bg-black text-white rounded px-3 py-1">Simpan Item</button>' +
       (r['Diedit Oleh'] ? '<p class="text-xs text-gray-400 mt-1">Terakhir diedit: ' + r['Diedit Oleh'] + '</p>' : '') +
     '</div>';
   }).join('');
 
   return html;
-}
-
-// Sama kayak opsiKategoriHtml tapi tanpa opsi "+ kategori baru" (belum diwire di konteks edit).
-function opsiKategoriHtmlPolos(defaultVal) {
-  return kategoriListCache.map(function (k) {
-    return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
-  }).join('');
 }
 
 function toggleEditStruk(idStruk) {
@@ -767,6 +823,7 @@ async function simpanEditItem(idItem) {
       nama: localStorage.getItem('ct_nama'),
       idItem: idItem,
       itemNama: document.getElementById('edNama-' + idItem).value.trim(),
+      idProduk: document.getElementById('edProdukLink-' + idItem).value,
       qty: document.getElementById('edQty-' + idItem).value,
       satuan: document.getElementById('edSatuan-' + idItem).value.trim(),
       hargaTotal: document.getElementById('edHarga-' + idItem).value,
@@ -781,26 +838,38 @@ async function simpanEditItem(idItem) {
   }
 }
 
-// ==== TAB KATALOG ====
-async function muatKatalog() {
-  try {
-    const hasil = await callBackend({ action: 'getKatalog' });
-    if (hasil.error) { alert('Gagal muat katalog: ' + hasil.error); return; }
-    katalogProdukCache = hasil.produk || [];
-    katalogTokoCache = hasil.toko || [];
-    if (dataPengeluaran.length === 0) {
-      const r = await callBackend({ action: 'getRiwayat' });
-      if (r.error) { alert('Gagal muat riwayat: ' + r.error); return; }
-      dataPengeluaran = r.rows || [];
-    }
-    renderKatalog();
-  } catch (err) {
-    alert('Gagal muat katalog: ' + err.message);
+// ==== TAB PRODUK & TOKO ====
+let filterTeksProduk = '';
+let filterTeksToko = '';
+
+async function muatProdukToko() {
+  const hasil = await callBackend({ action: 'getKatalog' });
+  if (hasil.error) throw new Error(hasil.error);
+  katalogProdukCache = hasil.produk || [];
+  katalogTokoCache = hasil.toko || [];
+  if (dataPengeluaran.length === 0) {
+    const r = await callBackend({ action: 'getRiwayat' });
+    if (r.error) throw new Error(r.error);
+    dataPengeluaran = r.rows || [];
   }
 }
 
-function renderKatalog() {
-  document.getElementById('listProduk').innerHTML = katalogProdukCache.map(function (p) {
+async function bukaTabProduk() {
+  try { await muatProdukToko(); renderProduk(); } catch (err) { alert('Gagal muat produk: ' + err.message); }
+}
+async function bukaTabToko() {
+  try { await muatProdukToko(); renderToko(); } catch (err) { alert('Gagal muat toko: ' + err.message); }
+}
+
+function cariProduk(teks) { filterTeksProduk = teks.toLowerCase(); renderProduk(); }
+function cariToko(teks) { filterTeksToko = teks.toLowerCase(); renderToko(); }
+
+function renderProduk() {
+  const daftar = katalogProdukCache.filter(function (p) {
+    return !filterTeksProduk || (p['Nama Kanonik'] || '').toLowerCase().indexOf(filterTeksProduk) !== -1;
+  });
+
+  document.getElementById('listProduk').innerHTML = daftar.map(function (p) {
     const idP = p['ID Produk'];
     const beliUntukProduk = dataPengeluaran.filter(function (r) { return r['ID Produk'] === idP; });
     const perToko = {};
@@ -810,36 +879,169 @@ function renderKatalog() {
     });
     const daftarToko = Object.values(perToko).sort(function (a, b) { return (a['Harga per Satuan'] || 0) - (b['Harga per Satuan'] || 0); });
 
-    return '<details class="border rounded-lg p-3 bg-white mb-2">' +
-      '<summary class="font-medium">' + p['Nama Kanonik'] + '</summary>' +
-      '<div class="mt-2 space-y-1 text-sm">' +
-      (daftarToko.map(function (r, i) {
-        return '<div class="flex justify-between ' + (i === 0 ? 'text-green-600 font-medium' : 'text-gray-500') + '">' +
-          '<span>' + r['Toko'] + '</span>' +
-          '<span>' + formatRupiah(r['Harga per Satuan']) + ' · ' + new Date(r['Timestamp']).toLocaleDateString('id-ID') + '</span></div>';
-      }).join('') || '<p class="text-gray-400">Belum ada data harga</p>') +
-      '</div></details>';
-  }).join('') || '<p class="text-gray-400 text-sm">Katalog produk masih kosong</p>';
-
-  document.getElementById('listToko').innerHTML = katalogTokoCache.map(function (t) {
-    return '<div class="border rounded-lg p-3 bg-white mb-2 text-sm">' + t['Nama Kanonik Cabang'] + '</div>';
-  }).join('') || '<p class="text-gray-400 text-sm">Katalog toko masih kosong</p>';
+    return '<div class="border rounded-lg bg-white mb-2">' +
+      '<div class="p-3">' +
+        '<div class="flex justify-between items-start gap-2">' +
+          '<p class="font-medium">' + p['Nama Kanonik'] + '</p>' +
+          '<button onclick="toggleEditProduk(\'' + idP + '\')" class="text-xs text-gray-400 whitespace-nowrap">Edit</button>' +
+        '</div>' +
+        '<div class="mt-2 space-y-1 text-sm">' +
+        (daftarToko.map(function (r, i) {
+          return '<div class="flex justify-between ' + (i === 0 ? 'text-green-600 font-medium' : 'text-gray-500') + '">' +
+            '<span>' + r['Toko'] + '</span>' +
+            '<span>' + formatRupiah(r['Harga per Satuan']) + ' · ' + new Date(r['Timestamp']).toLocaleDateString('id-ID') + '</span></div>';
+        }).join('') || '<p class="text-gray-400">Belum ada data harga</p>') +
+        '</div>' +
+      '</div>' +
+      '<div id="editProduk-' + idP + '" class="hidden border-t p-3 bg-gray-50">' +
+        '<label class="text-xs text-gray-500">Nama Kanonik (lengkap)</label>' +
+        '<input id="edNamaProduk-' + idP + '" value="' + (p['Nama Kanonik'] || '') + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
+        '<label class="text-xs text-gray-500">Satuan Standar</label>' +
+        '<input id="edSatuanProduk-' + idP + '" value="' + (p['Satuan Standar'] || '') + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
+        '<label class="text-xs text-gray-500">Kategori Default</label>' +
+        '<select id="edKategoriProduk-' + idP + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' + opsiKategoriHtmlPolos(p['Kategori Default']) + '</select>' +
+        '<label class="text-xs text-gray-500">Barcode (buat identifikasi unik produk ini)</label>' +
+        '<input id="edBarcodeProduk-' + idP + '" value="' + (p['Barcode'] || '') + '" placeholder="Scan atau isi manual" class="w-full border rounded px-2 py-1 mb-2 text-sm">' +
+        '<div class="flex gap-1 mb-2">' +
+          '<button onclick="mulaiScanBarcode(\'' + idP + '\')" class="flex-1 border rounded px-2 py-1 text-xs">📷 Scan Kamera</button>' +
+          '<label class="flex-1 border rounded px-2 py-1 text-xs text-center cursor-pointer">🖼️ Dari Galeri<input type="file" accept="image/*" class="hidden" onchange="bacaBarcodeDariGaleri(event, \'' + idP + '\')"></label>' +
+        '</div>' +
+        '<button onclick="jalankanSekali(this, \'Menyimpan...\', function(){return simpanEditProduk(\'' + idP + '\');})" class="w-full bg-black text-white rounded px-3 py-1 text-sm">Simpan</button>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<p class="text-gray-400 text-sm">Nggak ada produk yang cocok</p>';
 }
 
-// ==== TAB SETTING ====
-function bukaSetting() {
+function toggleEditProduk(idProduk) {
+  document.getElementById('editProduk-' + idProduk).classList.toggle('hidden');
+}
+
+async function simpanEditProduk(idProduk) {
+  try {
+    const hasil = await callBackend({
+      action: 'simpanProduk',
+      idProduk: idProduk,
+      namaKanonik: document.getElementById('edNamaProduk-' + idProduk).value.trim(),
+      satuan: document.getElementById('edSatuanProduk-' + idProduk).value.trim(),
+      kategoriDefault: document.getElementById('edKategoriProduk-' + idProduk).value,
+      barcode: document.getElementById('edBarcodeProduk-' + idProduk).value.trim()
+    });
+    if (hasil.error) { alert(hasil.error); return; }
+    alert('Produk tersimpan');
+    await muatProdukToko();
+    renderProduk();
+  } catch (err) {
+    alert('Gagal simpan: ' + err.message);
+  }
+}
+
+function renderToko() {
+  const daftar = katalogTokoCache.filter(function (t) {
+    return !filterTeksToko || (t['Nama Kanonik Cabang'] || '').toLowerCase().indexOf(filterTeksToko) !== -1;
+  });
+
+  document.getElementById('listToko').innerHTML = daftar.map(function (t) {
+    const idT = t['ID Toko'];
+    const rowsDiToko = dataPengeluaran.filter(function (r) { return (idT && r['ID Toko'] === idT) || r['Toko'] === t['Nama Kanonik Cabang']; });
+    const perProduk = {};
+    rowsDiToko.forEach(function (r) {
+      const kunci = r['ID Produk'] || r['Item'];
+      if (!perProduk[kunci] || new Date(r['Timestamp']) > new Date(perProduk[kunci]['Timestamp'])) perProduk[kunci] = r;
+    });
+    const daftarProduk = Object.values(perProduk).sort(function (a, b) { return new Date(b['Timestamp']) - new Date(a['Timestamp']); });
+
+    return '<details class="border rounded-lg p-3 bg-white mb-2">' +
+      '<summary class="font-medium">' + t['Nama Kanonik Cabang'] + '</summary>' +
+      '<div class="mt-2 space-y-1 text-sm">' +
+      '<p class="text-xs text-gray-400 mb-1">Produk yang pernah dibeli di sini:</p>' +
+      (daftarProduk.map(function (r) {
+        return '<div class="flex justify-between text-gray-600">' +
+          '<span>' + (r['Item'] || '-') + '</span>' +
+          '<span>' + formatRupiah(r['Harga per Satuan']) + '</span></div>';
+      }).join('') || '<p class="text-gray-400">Belum ada produk tercatat di toko ini</p>') +
+      '</div></details>';
+  }).join('') || '<p class="text-gray-400 text-sm">Nggak ada toko yang cocok</p>';
+}
+
+// ==== BARCODE SCANNER (poin 5 — pakai library ZXing dari CDN, belum sempet ditest kamera beneran) ====
+let zxingReader = null;
+let scanTargetId = null;
+
+function mulaiScanBarcode(idProduk) {
+  if (typeof ZXing === 'undefined') { alert('Library scanner belum kemuat (cek koneksi internet) — isi barcode manual aja di kolomnya.'); return; }
+  scanTargetId = idProduk;
+  document.getElementById('layarScanBarcode').classList.remove('hidden');
+  zxingReader = new ZXing.BrowserMultiFormatReader();
+  zxingReader.decodeFromVideoDevice(null, 'videoScanBarcode', function (result) {
+    if (result) {
+      document.getElementById('edBarcodeProduk-' + scanTargetId).value = result.getText();
+      tutupScanBarcode();
+    }
+  }).catch(function (err) {
+    alert('Gagal buka kamera: ' + err.message + ' — isi barcode manual aja.');
+    tutupScanBarcode();
+  });
+}
+
+function tutupScanBarcode() {
+  if (zxingReader) { try { zxingReader.reset(); } catch (e) {} zxingReader = null; }
+  document.getElementById('layarScanBarcode').classList.add('hidden');
+}
+
+function bacaBarcodeDariGaleri(event, idProduk) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (typeof ZXing === 'undefined') { alert('Library scanner belum kemuat — isi barcode manual aja.'); return; }
+  const reader = new FileReader();
+  reader.onload = async function () {
+    try {
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      const hasil = await codeReader.decodeFromImageUrl(reader.result);
+      document.getElementById('edBarcodeProduk-' + idProduk).value = hasil.getText();
+    } catch (err) {
+      alert('Barcode nggak kedeteksi dari foto itu — coba foto lebih jelas/dekat, atau isi manual.');
+    }
+    event.target.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ==== OVERLAY SETTING (edit/simpan pattern biar field URL/key nggak kepencet ubah nggak sengaja) ====
+function bukaLayarSetting() {
   document.getElementById('inputWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
   document.getElementById('inputGeminiKey').value = localStorage.getItem('ct_gemini_key') || '';
   document.getElementById('inputGroqKey').value = localStorage.getItem('ct_groq_key') || '';
   const isOwner = localStorage.getItem('ct_isowner') === '1';
   document.getElementById('bagianKelolaAkses').classList.toggle('hidden', !isOwner);
   if (isOwner) muatAkses();
+  document.getElementById('layarSettingOverlay').classList.remove('hidden');
+}
+
+function tutupLayarSetting() {
+  document.getElementById('layarSettingOverlay').classList.add('hidden');
+}
+
+function editSetting() {
+  ['inputWebAppUrl', 'inputGeminiKey', 'inputGroqKey'].forEach(function (id) {
+    const el = document.getElementById(id);
+    el.readOnly = false;
+    el.classList.remove('bg-gray-50');
+  });
+  document.getElementById('tombolEditSetting').classList.add('hidden');
+  document.getElementById('tombolSimpanSetting').classList.remove('hidden');
 }
 
 function simpanSetting() {
   localStorage.setItem('ct_webapp_url', document.getElementById('inputWebAppUrl').value.trim());
   localStorage.setItem('ct_gemini_key', document.getElementById('inputGeminiKey').value.trim());
   localStorage.setItem('ct_groq_key', document.getElementById('inputGroqKey').value.trim());
+  ['inputWebAppUrl', 'inputGeminiKey', 'inputGroqKey'].forEach(function (id) {
+    const el = document.getElementById(id);
+    el.readOnly = true;
+    el.classList.add('bg-gray-50');
+  });
+  document.getElementById('tombolSimpanSetting').classList.add('hidden');
+  document.getElementById('tombolEditSetting').classList.remove('hidden');
   alert('Tersimpan');
 }
 
@@ -851,7 +1053,7 @@ async function muatAkses() {
     const isOwner = n.toLowerCase() === hasil.owner.toLowerCase();
     return '<div class="flex justify-between items-center border-b py-2 text-sm">' +
       '<span>' + n + (isOwner ? ' 👑' : '') + '</span>' +
-      (isOwner ? '' : '<button onclick="hapusAkses(\'' + n + '\')" class="text-red-500 text-xs">Hapus</button>') +
+      (isOwner ? '' : '<button onclick="jalankanSekali(this, \'Menghapus...\', function(){return hapusAkses(\'' + n + '\');})" class="text-red-500 text-xs">Hapus</button>') +
       '</div>';
   }).join('');
 }
