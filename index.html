@@ -25,6 +25,10 @@
 
   <label class="text-xs text-gray-500">Gemini API Key</label>
   <input id="setupGeminiKey" type="text" placeholder="API key dari aistudio.google.com"
+    class="w-full border rounded-lg px-4 py-3 mb-3 text-sm">
+
+  <label class="text-xs text-gray-500">Groq API Key (opsional — cadangan kalau Gemini lagi penuh)</label>
+  <input id="setupGroqKey" type="text" placeholder="API key dari console.groq.com"
     class="w-full border rounded-lg px-4 py-3 mb-4 text-sm">
 
   <button onclick="simpanSetup()" class="w-full bg-black text-white rounded-lg py-3 font-medium">Lanjut</button>
@@ -83,6 +87,7 @@
         <input id="inputJam" type="time" class="w-28 border rounded-lg px-3 py-2">
       </div>
       <p id="labelJamPerkiraan" class="hidden text-xs text-orange-500 mb-2">⚠️ Jam nggak kebaca dari struk — ini perkiraan, tolong dicek/dikoreksi.</p>
+      <p id="labelProviderCadangan" class="hidden text-xs text-blue-500 mb-2">ℹ️ Gemini lagi nggak bisa diakses, struk ini dibaca pakai Groq (cadangan) — hasilnya mungkin kurang akurat, tolong dicek lebih teliti.</p>
 
       <label class="text-xs text-gray-500">No. Transaksi (opsional, kalau ada di struk)</label>
       <input id="inputIdTransaksi" type="text" class="w-full border rounded-lg px-3 py-2 mb-3">
@@ -129,6 +134,8 @@
     <input id="inputWebAppUrl" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
     <label class="text-xs text-gray-500">Gemini API Key</label>
     <input id="inputGeminiKey" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
+    <label class="text-xs text-gray-500">Groq API Key (opsional — cadangan kalau Gemini lagi penuh)</label>
+    <input id="inputGroqKey" type="text" class="w-full border rounded-lg px-3 py-2 mb-3 text-sm">
     <button onclick="simpanSetting()" class="w-full bg-black text-white rounded-lg py-2 font-medium mb-6">Simpan</button>
 
     <div id="bagianKelolaAkses" class="hidden">
@@ -218,6 +225,35 @@ async function panggilGemini(base64Image, mimeType, katalogProduk, katalogToko) 
   return JSON.parse(json.candidates[0].content.parts[0].text);
 }
 
+// Model vision Groq berubah-ubah (per Agustus 2026 yang tersedia gratis & support vision
+// cuma "qwen/qwen3.6-27b", statusnya masih Preview di Groq — bukan buat production stabil).
+// Kalau suatu saat gagal terus, cek model vision terbaru di console.groq.com/docs/vision
+// dan ganti nilai konstanta ini aja.
+const GROQ_MODEL_VISION = 'qwen/qwen3.6-27b';
+
+async function panggilGroq(base64Image, mimeType, katalogProduk, katalogToko) {
+  const apiKey = localStorage.getItem('ct_groq_key');
+  const payload = {
+    model: GROQ_MODEL_VISION,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: buildPrompt(katalogProduk, katalogToko) },
+        { type: 'image_url', image_url: { url: 'data:' + mimeType + ';base64,' + base64Image } }
+      ]
+    }],
+    response_format: { type: 'json_object' }
+  };
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  return JSON.parse(json.choices[0].message.content);
+}
+
 function buildPrompt(katalogProduk, katalogToko) {
   return [
     'Kamu membaca struk belanja Indonesia (minimarket/toko kelontong/SPBU). Baca gambar struk dan keluarkan HANYA JSON (tanpa markdown, tanpa penjelasan) dengan struktur persis ini:',
@@ -295,9 +331,11 @@ async function terimaUndangan() {
 function simpanSetup() {
   const url = document.getElementById('setupWebAppUrl').value.trim();
   const key = document.getElementById('setupGeminiKey').value.trim();
-  if (!url || !key) { alert('Isi Web App URL dan API key dulu'); return; }
+  const groqKey = document.getElementById('setupGroqKey').value.trim();
+  if (!url || !key) { alert('Isi Web App URL dan Gemini API key dulu'); return; }
   localStorage.setItem('ct_webapp_url', url);
   localStorage.setItem('ct_gemini_key', key);
+  if (groqKey) localStorage.setItem('ct_groq_key', groqKey);
   document.getElementById('layarSetup').classList.add('hidden');
   document.getElementById('layarLogin').classList.remove('hidden');
 }
@@ -356,7 +394,9 @@ function fotoDipilih(event) {
     return;
   }
   modeManual = false;
-  document.getElementById('statusProses').classList.remove('hidden');
+  const statusEl = document.getElementById('statusProses');
+  statusEl.innerText = 'Membaca struk...';
+  statusEl.classList.remove('hidden');
 
   const reader = new FileReader();
   reader.onload = async function () {
@@ -365,12 +405,24 @@ function fotoDipilih(event) {
       const katalog = await callBackend({ action: 'getKatalog' });
       katalogProdukCache = katalog.produk || [];
       katalogTokoCache = katalog.toko || [];
-      const hasil = await panggilGemini(base64, file.type, katalogProdukCache, katalogTokoCache);
-      document.getElementById('statusProses').classList.add('hidden');
-      tampilkanReview(hasil);
+
+      let hasil, providerDipakai;
+      try {
+        hasil = await panggilGemini(base64, file.type, katalogProdukCache, katalogTokoCache);
+        providerDipakai = 'Gemini';
+      } catch (errGemini) {
+        // Gemini gagal (limit/overload/dll) — otomatis coba Groq kalau key-nya ada.
+        if (!localStorage.getItem('ct_groq_key')) throw errGemini;
+        statusEl.innerText = 'Gemini lagi sibuk, coba provider cadangan (Groq)...';
+        hasil = await panggilGroq(base64, file.type, katalogProdukCache, katalogTokoCache);
+        providerDipakai = 'Groq';
+      }
+
+      statusEl.classList.add('hidden');
+      tampilkanReview(hasil, providerDipakai);
     } catch (err) {
-      document.getElementById('statusProses').classList.add('hidden');
-      alert('Gagal baca struk: ' + err.message);
+      statusEl.classList.add('hidden');
+      alert('Gagal baca struk (Gemini' + (localStorage.getItem('ct_groq_key') ? ' maupun Groq' : '') + '): ' + err.message);
     }
     event.target.value = '';
   };
@@ -393,10 +445,11 @@ function tambahItemManual() {
 }
 
 // ==== LAYAR REVIEW (dipake sama-sama sama jalur Foto & Manual) ====
-function tampilkanReview(hasil) {
+function tampilkanReview(hasil, providerDipakai) {
   hasilStruk = hasil;
   document.getElementById('areaCapture').classList.add('hidden');
   document.getElementById('areaReview').classList.remove('hidden');
+  document.getElementById('labelProviderCadangan').classList.toggle('hidden', providerDipakai !== 'Groq');
 
   document.getElementById('inputToko').value = cariNamaToko(hasil.toko_match_id) || hasil.toko_raw || '';
   document.getElementById('inputTanggal').value = hasil.tanggal || new Date().toISOString().slice(0, 10);
@@ -777,6 +830,7 @@ function renderKatalog() {
 function bukaSetting() {
   document.getElementById('inputWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
   document.getElementById('inputGeminiKey').value = localStorage.getItem('ct_gemini_key') || '';
+  document.getElementById('inputGroqKey').value = localStorage.getItem('ct_groq_key') || '';
   const isOwner = localStorage.getItem('ct_isowner') === '1';
   document.getElementById('bagianKelolaAkses').classList.toggle('hidden', !isOwner);
   if (isOwner) muatAkses();
@@ -785,6 +839,7 @@ function bukaSetting() {
 function simpanSetting() {
   localStorage.setItem('ct_webapp_url', document.getElementById('inputWebAppUrl').value.trim());
   localStorage.setItem('ct_gemini_key', document.getElementById('inputGeminiKey').value.trim());
+  localStorage.setItem('ct_groq_key', document.getElementById('inputGroqKey').value.trim());
   alert('Tersimpan');
 }
 
