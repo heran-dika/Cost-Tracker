@@ -11,6 +11,13 @@
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; }
   .hidden { display: none !important; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+  }
+  .animate-shake { animation: shake 0.4s; }
+  .border-error { border-color: #ef4444 !important; border-width: 2px !important; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -60,10 +67,7 @@
 
   <div class="flex justify-between items-center p-4 border-b bg-white sticky top-0 z-10">
     <p class="text-gray-500 text-sm">Halo, <span id="namaUser" class="font-medium text-black"></span></p>
-    <div class="flex items-center gap-3">
-      <button onclick="bukaLayarSetting()" class="text-lg text-gray-400" title="Pengaturan">⚙️</button>
-      <button onclick="logout()" class="text-xs text-gray-400">Keluar</button>
-    </div>
+    <button onclick="bukaLayarSetting()" class="text-lg text-gray-400" title="Pengaturan">⚙️</button>
   </div>
 
   <!-- TAB: INPUT -->
@@ -172,6 +176,10 @@
           <p class="text-xs text-gray-400">Kirim link ini ke staff kamu. Setelah mereka masukin nama, refresh halaman ini buat lihat nama-nya udah masuk atau belum.</p>
         </div>
       </div>
+
+      <div class="border-t mt-6 pt-4">
+        <button onclick="logout()" class="w-full text-red-500 text-sm py-2">Keluar dari akun</button>
+      </div>
     </div>
   </div>
 
@@ -207,12 +215,30 @@ function jalankanSekali(tombol, teksProses, fn) {
   });
 }
 
+// Kasih tau field mana yang harus diisi — border merah + goyang, bukan alert polos.
+// Ilang otomatis begitu user mulai ngetik/isi field itu.
+function tandaiError(el) {
+  if (!el) return;
+  el.classList.add('border-error');
+  el.classList.remove('animate-shake');
+  void el.offsetWidth; // reflow biar animasinya bisa retrigger kalau dipanggil lagi
+  el.classList.add('animate-shake');
+  const bersihkan = function () { el.classList.remove('border-error'); el.removeEventListener('input', bersihkan); el.removeEventListener('change', bersihkan); };
+  el.addEventListener('input', bersihkan, { once: true });
+  el.addEventListener('change', bersihkan, { once: true });
+}
+
+function scrollKeError(el) {
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 let jsonpCounter = 0;
 function callBackend(payload) {
   return new Promise(function (resolve, reject) {
     const url = localStorage.getItem('ct_webapp_url');
     if (!url) { reject(new Error('Web App URL belum diisi')); return; }
 
+    const aksi = (payload && payload.action) ? payload.action : 'nggak diketahui';
     const cbName = 'ctCallback' + (jsonpCounter++);
     const script = document.createElement('script');
 
@@ -227,7 +253,7 @@ function callBackend(payload) {
     };
 
     script.onerror = function () {
-      reject(new Error('Gagal muat dari Web App URL — cek lagi URL-nya bener atau nggak'));
+      reject(new Error('Gagal muat dari Web App URL (aksi: ' + aksi + ') — cek lagi URL-nya bener atau nggak'));
       bersihkan();
     };
 
@@ -236,7 +262,7 @@ function callBackend(payload) {
 
     setTimeout(function () {
       if (window[cbName]) {
-        reject(new Error('Timeout — backend nggak respons dalam 15 detik'));
+        reject(new Error('Timeout — backend nggak respons dalam 15 detik (aksi: ' + aksi + ')'));
         bersihkan();
       }
     }, 15000);
@@ -319,6 +345,25 @@ let katalogTokoCache = [];
 let hasilStruk = null;
 let modeManual = false;
 
+// State cache & refresh — data disimpen di localStorage biar reload nggak nampilin layar kosong,
+// dan backend cuma di-fetch ulang kalau beneran ada perubahan (simpen/edit), bukan tiap buka tab.
+let riwayatPerluFetch = true;
+let produkTokoPerluFetch = true;
+let sedangMuatRiwayat = false;
+let sedangMuatProdukToko = false;
+
+function tandaiDataBerubah() {
+  riwayatPerluFetch = true;
+  produkTokoPerluFetch = true;
+}
+
+function muatCacheDariLocalStorage() {
+  try { dataPengeluaran = JSON.parse(localStorage.getItem('ct_cache_riwayat') || '[]'); } catch (e) { dataPengeluaran = []; }
+  try { katalogProdukCache = JSON.parse(localStorage.getItem('ct_cache_produk') || '[]'); } catch (e) { katalogProdukCache = []; }
+  try { katalogTokoCache = JSON.parse(localStorage.getItem('ct_cache_toko') || '[]'); } catch (e) { katalogTokoCache = []; }
+  try { kategoriListCache = JSON.parse(localStorage.getItem('ct_cache_kategori') || '[]'); } catch (e) { kategoriListCache = []; }
+}
+
 window.onload = function () {
   const params = new URLSearchParams(location.search);
   const inviteToken = params.get('invite');
@@ -340,19 +385,22 @@ window.onload = function () {
   } else if (!nama) {
     document.getElementById('layarLogin').classList.remove('hidden');
   } else {
+    muatCacheDariLocalStorage();
     masukKeApp();
   }
 };
 
 async function terimaUndangan() {
-  const nama = document.getElementById('inputNamaUndangan').value.trim();
-  if (!nama) return;
+  const inputEl = document.getElementById('inputNamaUndangan');
+  const nama = inputEl.value.trim();
+  if (!nama) { tandaiError(inputEl); return; }
   try {
     const hasil = await callBackend({ action: 'pakaiUndangan', nama: nama, token: window._inviteToken });
     if (hasil.valid) {
       localStorage.setItem('ct_nama', hasil.nama);
       localStorage.setItem('ct_isowner', '0');
       kategoriListCache = hasil.kategoriList || [];
+      localStorage.setItem('ct_cache_kategori', JSON.stringify(kategoriListCache));
       document.getElementById('layarUndangan').classList.add('hidden');
       if (!localStorage.getItem('ct_gemini_key')) {
         document.getElementById('setupWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
@@ -370,10 +418,15 @@ async function terimaUndangan() {
 }
 
 function simpanSetup() {
-  const url = document.getElementById('setupWebAppUrl').value.trim();
-  const key = document.getElementById('setupGeminiKey').value.trim();
+  const urlEl = document.getElementById('setupWebAppUrl');
+  const keyEl = document.getElementById('setupGeminiKey');
+  const url = urlEl.value.trim();
+  const key = keyEl.value.trim();
   const groqKey = document.getElementById('setupGroqKey').value.trim();
-  if (!url || !key) { alert('Isi Web App URL dan Gemini API key dulu'); return; }
+  let adaError = false;
+  if (!url) { tandaiError(urlEl); adaError = true; }
+  if (!key) { tandaiError(keyEl); adaError = true; }
+  if (adaError) { scrollKeError(urlEl); return; }
   localStorage.setItem('ct_webapp_url', url);
   localStorage.setItem('ct_gemini_key', key);
   if (groqKey) localStorage.setItem('ct_groq_key', groqKey);
@@ -382,14 +435,16 @@ function simpanSetup() {
 }
 
 async function login() {
-  const nama = document.getElementById('inputNama').value.trim();
-  if (!nama) return;
+  const inputEl = document.getElementById('inputNama');
+  const nama = inputEl.value.trim();
+  if (!nama) { tandaiError(inputEl); return; }
   try {
     const hasil = await callBackend({ action: 'login', nama: nama });
     if (hasil.valid) {
       localStorage.setItem('ct_nama', hasil.nama);
       localStorage.setItem('ct_isowner', hasil.isOwner ? '1' : '0');
       kategoriListCache = hasil.kategoriList || [];
+      localStorage.setItem('ct_cache_kategori', JSON.stringify(kategoriListCache));
       masukKeApp();
     } else {
       document.getElementById('loginError').classList.remove('hidden');
@@ -410,11 +465,13 @@ function masukKeApp() {
   document.getElementById('layarLogin').classList.add('hidden');
   document.getElementById('appUtama').classList.remove('hidden');
   document.getElementById('namaUser').innerText = localStorage.getItem('ct_nama');
-  showTab('Input');
+  const tabTerakhir = localStorage.getItem('ct_tab_aktif') || 'Input';
+  showTab(tabTerakhir);
 }
 
 // ==== NAVIGASI TAB ====
 function showTab(tab) {
+  localStorage.setItem('ct_tab_aktif', tab);
   ['Input', 'Riwayat', 'Produk', 'Toko'].forEach(function (t) {
     document.getElementById('tab' + t).classList.toggle('hidden', t !== tab);
     document.getElementById('nav' + t).classList.toggle('text-black', t === tab);
@@ -566,13 +623,12 @@ async function simpanSemua() {
   tombol.innerText = 'Mengecek...';
 
   try {
-    const tokoNama = document.getElementById('inputToko').value.trim();
+    const tokoEl = document.getElementById('inputToko');
+    const tokoNama = tokoEl.value.trim();
     let tanggal = document.getElementById('inputTanggal').value;
     if (!tanggal) tanggal = new Date().toISOString().slice(0, 10); // default hari ini kalau dikosongin
     const jam = document.getElementById('inputJam').value;
     const idTransaksi = document.getElementById('inputIdTransaksi').value.trim();
-
-    if (!tokoNama) { alert('Toko wajib diisi'); return; }
 
     const itemEls = document.querySelectorAll('#listItem [data-field]');
     const items = {};
@@ -580,14 +636,21 @@ async function simpanSemua() {
       const i = el.dataset.i;
       items[i] = items[i] || {};
       items[i][el.dataset.field] = el.value;
+      items[i]['_el_' + el.dataset.field] = el;
     });
+
+    let elPertamaError = null;
+    let adaError = false;
+    if (!tokoNama) { tandaiError(tokoEl); elPertamaError = elPertamaError || tokoEl; adaError = true; }
 
     for (const i in items) {
       const it = items[i];
-      if (!it.nama_produk || !it.nama_produk.trim()) { alert('Nama barang di salah satu item masih kosong'); return; }
-      if (!it.harga_total || Number(it.harga_total) <= 0) { alert('Harga di salah satu item masih kosong/0'); return; }
-      if (!it.qty || Number(it.qty) <= 0) { alert('Qty di salah satu item masih kosong/0'); return; }
+      if (!it.nama_produk || !it.nama_produk.trim()) { tandaiError(it['_el_nama_produk']); elPertamaError = elPertamaError || it['_el_nama_produk']; adaError = true; }
+      if (!it.harga_total || Number(it.harga_total) <= 0) { tandaiError(it['_el_harga_total']); elPertamaError = elPertamaError || it['_el_harga_total']; adaError = true; }
+      if (!it.qty || Number(it.qty) <= 0) { tandaiError(it['_el_qty']); elPertamaError = elPertamaError || it['_el_qty']; adaError = true; }
     }
+
+    if (adaError) { scrollKeError(elPertamaError); return; }
 
     const totalStruk = Object.keys(items).reduce(function (s, i) { return s + (Number(items[i].harga_total) || 0); }, 0);
 
@@ -649,6 +712,7 @@ async function simpanSemua() {
       });
     }
 
+    tandaiDataBerubah();
     alert('Tersimpan!');
     batalReview();
   } catch (err) {
@@ -664,13 +728,22 @@ let riwayatBulanAktif = new Date();
 riwayatBulanAktif.setDate(1);
 
 async function muatRiwayat() {
+  renderRiwayat(); // tampilin cache dulu, instan, ga nunggu backend
+  if (sedangMuatRiwayat) return; // lagi ada fetch jalan, biarin aja, jangan numpuk
+  if (!riwayatPerluFetch && dataPengeluaran.length > 0) return; // ga ada perubahan, cache masih valid
+
+  sedangMuatRiwayat = true;
   try {
     const hasil = await callBackend({ action: 'getRiwayat' });
     if (hasil.error) { alert('Gagal muat riwayat: ' + hasil.error); return; }
     dataPengeluaran = hasil.rows || [];
+    localStorage.setItem('ct_cache_riwayat', JSON.stringify(dataPengeluaran));
+    riwayatPerluFetch = false;
     renderRiwayat();
   } catch (err) {
     alert('Gagal muat riwayat: ' + err.message);
+  } finally {
+    sedangMuatRiwayat = false;
   }
 }
 
@@ -809,6 +882,7 @@ async function simpanEditHeader(idStruk) {
       idTransaksi: document.getElementById('edIdTransaksi-' + idStruk).value.trim()
     });
     if (hasil.error) { alert(hasil.error); return; }
+    tandaiDataBerubah();
     alert('Data struk tersimpan');
     muatRiwayat();
   } catch (err) {
@@ -831,6 +905,7 @@ async function simpanEditItem(idItem) {
       kategori: document.getElementById('edKategori-' + idItem).value
     });
     if (hasil.error) { alert(hasil.error); return; }
+    tandaiDataBerubah();
     alert('Item tersimpan');
     muatRiwayat();
   } catch (err) {
@@ -843,21 +918,37 @@ let filterTeksProduk = '';
 let filterTeksToko = '';
 
 async function muatProdukToko() {
-  const hasil = await callBackend({ action: 'getKatalog' });
-  if (hasil.error) throw new Error(hasil.error);
-  katalogProdukCache = hasil.produk || [];
-  katalogTokoCache = hasil.toko || [];
-  if (dataPengeluaran.length === 0) {
-    const r = await callBackend({ action: 'getRiwayat' });
-    if (r.error) throw new Error(r.error);
-    dataPengeluaran = r.rows || [];
+  if (sedangMuatProdukToko) return; // lagi ada fetch jalan, jangan numpuk
+  if (!produkTokoPerluFetch && katalogProdukCache.length > 0) return; // ga ada perubahan, cache masih valid
+
+  sedangMuatProdukToko = true;
+  try {
+    const hasil = await callBackend({ action: 'getKatalog' });
+    if (hasil.error) throw new Error(hasil.error);
+    katalogProdukCache = hasil.produk || [];
+    katalogTokoCache = hasil.toko || [];
+    localStorage.setItem('ct_cache_produk', JSON.stringify(katalogProdukCache));
+    localStorage.setItem('ct_cache_toko', JSON.stringify(katalogTokoCache));
+
+    if (dataPengeluaran.length === 0 || riwayatPerluFetch) {
+      const r = await callBackend({ action: 'getRiwayat' });
+      if (r.error) throw new Error(r.error);
+      dataPengeluaran = r.rows || [];
+      localStorage.setItem('ct_cache_riwayat', JSON.stringify(dataPengeluaran));
+      riwayatPerluFetch = false;
+    }
+    produkTokoPerluFetch = false;
+  } finally {
+    sedangMuatProdukToko = false;
   }
 }
 
 async function bukaTabProduk() {
+  renderProduk(); // tampilin cache dulu
   try { await muatProdukToko(); renderProduk(); } catch (err) { alert('Gagal muat produk: ' + err.message); }
 }
 async function bukaTabToko() {
+  renderToko(); // tampilin cache dulu
   try { await muatProdukToko(); renderToko(); } catch (err) { alert('Gagal muat toko: ' + err.message); }
 }
 
@@ -899,7 +990,8 @@ function renderProduk() {
         '<label class="text-xs text-gray-500">Satuan Standar</label>' +
         '<input id="edSatuanProduk-' + idP + '" value="' + (p['Satuan Standar'] || '') + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
         '<label class="text-xs text-gray-500">Kategori Default</label>' +
-        '<select id="edKategoriProduk-' + idP + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' + opsiKategoriHtmlPolos(p['Kategori Default']) + '</select>' +
+        '<select id="edKategoriProduk-' + idP + '" onchange="cekTambahKategoriProduk(\'' + idP + '\')" class="w-full border rounded px-2 py-1 mb-1 text-sm">' + opsiKategoriHtml(p['Kategori Default']) + '</select>' +
+        '<input id="edKategoriBaruProduk-' + idP + '" type="text" placeholder="Nama kategori baru" class="hidden w-full border rounded px-2 py-1 mb-1 text-sm">' +
         '<label class="text-xs text-gray-500">Barcode (buat identifikasi unik produk ini)</label>' +
         '<input id="edBarcodeProduk-' + idP + '" value="' + (p['Barcode'] || '') + '" placeholder="Scan atau isi manual" class="w-full border rounded px-2 py-1 mb-2 text-sm">' +
         '<div class="flex gap-1 mb-2">' +
@@ -916,17 +1008,28 @@ function toggleEditProduk(idProduk) {
   document.getElementById('editProduk-' + idProduk).classList.toggle('hidden');
 }
 
+function cekTambahKategoriProduk(idProduk) {
+  const sel = document.getElementById('edKategoriProduk-' + idProduk);
+  const inputBaru = document.getElementById('edKategoriBaruProduk-' + idProduk);
+  inputBaru.classList.toggle('hidden', sel.value !== '__baru__');
+}
+
 async function simpanEditProduk(idProduk) {
   try {
+    let kategori = document.getElementById('edKategoriProduk-' + idProduk).value;
+    if (kategori === '__baru__') {
+      kategori = (document.getElementById('edKategoriBaruProduk-' + idProduk).value || '').trim() || 'Lain-lain';
+    }
     const hasil = await callBackend({
       action: 'simpanProduk',
       idProduk: idProduk,
       namaKanonik: document.getElementById('edNamaProduk-' + idProduk).value.trim(),
       satuan: document.getElementById('edSatuanProduk-' + idProduk).value.trim(),
-      kategoriDefault: document.getElementById('edKategoriProduk-' + idProduk).value,
+      kategoriDefault: kategori,
       barcode: document.getElementById('edBarcodeProduk-' + idProduk).value.trim()
     });
     if (hasil.error) { alert(hasil.error); return; }
+    tandaiDataBerubah();
     alert('Produk tersimpan');
     await muatProdukToko();
     renderProduk();
