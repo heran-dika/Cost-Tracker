@@ -88,7 +88,10 @@
       <!-- Ringkasan: budget bulanan vs actual + breakdown kategori -->
       <div id="ringkasanHome" class="mt-4">
         <div class="bg-white border rounded-xl p-4 mb-4">
-          <p class="text-xs text-gray-500 mb-1">Budget bulan ini</p>
+          <div class="flex justify-between items-center mb-1">
+            <p class="text-xs text-gray-500">Budget bulan ini</p>
+            <button id="tombolEditBudget" onclick="toggleEditBudget(true)" class="hidden text-xs text-gray-400">✎ Edit</button>
+          </div>
           <p id="labelBudgetVsActual" class="text-sm font-medium mb-2">Rp0 / Belum diset</p>
           <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <div id="barBudget" class="h-full bg-black rounded-full" style="width:0%"></div>
@@ -366,6 +369,13 @@ function buildPrompt(katalogProduk, katalogToko) {
 }
 
 // ==== INIT / SETUP / LOGIN ====
+// Fallback kalau kategoriListCache kosong (misal race condition pas app baru dibuka,
+// atau cache localStorage belum ke-isi) — biar dropdown Kategori nggak pernah bener2
+// kosong (yang bikin cuma opsi "+ Kategori baru" doang keliatan & nggak bisa diapa2in,
+// karena <select> nggak akan fire 'onchange' kalau cuma ada 1 opsi yang otomatis kepilih).
+// List ini sama persis kayak DEFAULT_CATEGORIES di Code.gs.
+const DEFAULT_KATEGORI_FALLBACK = ['Bahan Baku', 'Operasional', 'Kemasan', 'Pribadi'];
+
 let kategoriListCache = [];
 let dataPengeluaran = [];
 let katalogProdukCache = [];
@@ -686,8 +696,7 @@ function tampilkanReview(hasil, providerDipakai) {
       '<input data-i="' + i + '" data-field="harga_total" type="number" value="' + (item.harga_total || 0) + '" class="flex-1 border rounded px-2 py-1" placeholder="Harga total">' +
       '</div>' +
       '<div class="flex gap-2 text-sm">' +
-      '<select data-i="' + i + '" data-field="jenis" class="flex-1 border rounded px-2 py-1"><option value="Bisnis">Bisnis</option><option value="Pribadi">Pribadi</option></select>' +
-      '<select data-i="' + i + '" data-field="kategori" onchange="cekTambahKategori(' + i + ')" class="flex-1 border rounded px-2 py-1">' + opsiKategoriHtml('Bahan Baku') + '</select>' +
+      '<select data-i="' + i + '" data-field="kategori" onchange="cekTambahKategori(' + i + ')" class="w-full border rounded px-2 py-1">' + opsiKategoriHtml('Bahan Baku') + '</select>' +
       '</div>' +
       '<input data-i="' + i + '" data-field="kategoriBaru" type="text" placeholder="Nama kategori baru" class="hidden w-full border rounded px-2 py-1 mt-2">' +
       (item.produk_match_id
@@ -699,22 +708,26 @@ function tampilkanReview(hasil, providerDipakai) {
   document.getElementById('tombolTambahItem').classList.toggle('hidden', !modeManual);
 }
 
-function opsiKategoriHtml(defaultVal) {
-  return kategoriListCache.map(function (k) {
-    return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
-  }).join('') + '<option value="__baru__">+ Kategori baru</option>';
+function daftarKategoriAman() {
+  return (kategoriListCache && kategoriListCache.length) ? kategoriListCache : DEFAULT_KATEGORI_FALLBACK;
 }
 
-function opsiKategoriHtmlPolos(defaultVal) {
-  return kategoriListCache.map(function (k) {
+function opsiKategoriHtml(defaultVal) {
+  return daftarKategoriAman().map(function (k) {
     return '<option value="' + k + '"' + (k === defaultVal ? ' selected' : '') + '>' + k + '</option>';
-  }).join('');
+  }).join('') + '<option value="__baru__">+ Kategori baru</option>';
 }
 
 function cariNamaProduk(id) {
   if (!id) return null;
   const p = katalogProdukCache.find(function (x) { return x['ID Produk'] === id; });
   return p ? p['Nama Kanonik'] : null;
+}
+
+function cariAliasProduk(id) {
+  if (!id) return null;
+  const p = katalogProdukCache.find(function (x) { return x['ID Produk'] === id; });
+  return p ? p['Alias'] : null;
 }
 
 function cariNamaToko(id) {
@@ -814,7 +827,7 @@ async function simpanSemua() {
 
       await callBackend({
         action: 'simpanPengeluaran',
-        nama: nama, device: device, jenis: it.jenis,
+        nama: nama, device: device,
         idStruk: idStruk, sumber: sumber,
         idToko: idToko, tokoRaw: tokoNama,
         tanggal: tanggal, jam: jam, idTransaksi: idTransaksi,
@@ -906,21 +919,33 @@ async function simpanBudget() {
     if (hasil.error) { alert(hasil.error); return; }
     budgetBulanIni = nilaiBaru;
     localStorage.setItem('ct_cache_budget', JSON.stringify({ bulan: bulanIniKey(), nilai: budgetBulanIni }));
+    toggleEditBudget(false);
     renderRingkasanHome();
   } catch (err) {
     alert('Gagal simpan budget: ' + err.message);
   }
 }
 
+// Form set-budget defaultnya ketutup — cuma dipake ~1x sebulan, jadi nggak perlu selalu
+// nongol. Owner pencet "Edit" kecil di pojok buat munculin form-nya.
+function toggleEditBudget(tampilkan) {
+  document.getElementById('bagianSetBudget').classList.toggle('hidden', !tampilkan);
+  document.getElementById('tombolEditBudget').classList.toggle('hidden', tampilkan);
+  if (tampilkan) document.getElementById('inputBudgetBulanan').value = budgetBulanIni || '';
+}
+
 const WARNA_DONUT = ['#C2410C', '#0f766e', '#7c3aed', '#b45309', '#0369a1', '#be185d', '#4d7c0f'];
 
+// Cocokin bulan dari string tanggal "YYYY-MM-DD" langsung lewat potongan teks — SENGAJA
+// nggak lewat `new Date(...)`, karena konversi string->Date->balik lagi gampang geser
+// timezone (lihat catatan di Code.gs soal kunciKolomTanggalJadiTeks_/paksaTanggalJadiTeks).
+function tanggalDiBulan(tanggalStr, bulanKey) {
+  return !!tanggalStr && String(tanggalStr).slice(0, 7) === bulanKey;
+}
+
 function renderRingkasanHome() {
-  const now = new Date();
-  const rowsBulanIni = dataPengeluaran.filter(function (r) {
-    if (!r['Tanggal']) return false;
-    const t = new Date(r['Tanggal']);
-    return t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth();
-  });
+  const bulanIni = bulanIniKey();
+  const rowsBulanIni = dataPengeluaran.filter(function (r) { return tanggalDiBulan(r['Tanggal'], bulanIni); });
   const total = rowsBulanIni.reduce(function (s, r) { return s + Number(r['Harga Total'] || 0); }, 0);
 
   document.getElementById('labelBudgetVsActual').innerText =
@@ -951,10 +976,8 @@ function renderRingkasanHome() {
   document.getElementById('legendaKategori').innerHTML = legenda.join('') || '<p class="text-gray-400 text-xs">Belum ada pengeluaran bulan ini</p>';
 
   const isOwner = localStorage.getItem('ct_isowner') === '1';
-  document.getElementById('bagianSetBudget').classList.toggle('hidden', !isOwner);
-  if (isOwner && document.activeElement !== document.getElementById('inputBudgetBulanan')) {
-    document.getElementById('inputBudgetBulanan').value = budgetBulanIni || '';
-  }
+  document.getElementById('tombolEditBudget').classList.toggle('hidden', !isOwner);
+  if (!isOwner) document.getElementById('bagianSetBudget').classList.add('hidden');
 }
 
 function labelBulan(d) {
@@ -967,9 +990,8 @@ function gantiBulan(delta) {
 }
 
 function rowDalamBulanAktif(r) {
-  if (!r['Tanggal']) return false;
-  const t = new Date(r['Tanggal']);
-  return t.getFullYear() === riwayatBulanAktif.getFullYear() && t.getMonth() === riwayatBulanAktif.getMonth();
+  const bulanAktifKey = riwayatBulanAktif.getFullYear() + '-' + String(riwayatBulanAktif.getMonth() + 1).padStart(2, '0');
+  return tanggalDiBulan(r['Tanggal'], bulanAktifKey);
 }
 
 function groupRiwayatByStruk(rows) {
@@ -981,8 +1003,13 @@ function groupRiwayatByStruk(rows) {
     }
     grup[id].items.push(r);
   });
+  // Sort abjad berdasarkan nama item pertama di tiap struk (bukan kronologis lagi).
   return Object.keys(grup).map(function (k) { return grup[k]; })
-    .sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+    .sort(function (a, b) {
+      const namaA = ((a.items[0] && a.items[0]['Item']) || '').toLowerCase();
+      const namaB = ((b.items[0] && b.items[0]['Item']) || '').toLowerCase();
+      return namaA.localeCompare(namaB);
+    });
 }
 
 function renderRiwayat() {
@@ -998,10 +1025,10 @@ function renderRiwayat() {
       '<div class="p-3">' +
         '<div class="flex justify-between items-start gap-2">' +
           '<div class="min-w-0">' +
-            '<p class="text-xs text-gray-400">' + (g.toko || '-') + ' · ' + (g.tanggal || '-') + '</p>' +
+            '<p class="text-xs text-gray-400">' + (g.toko || '-') + ' · ' + formatRupiah(total) + '</p>' +
             '<p class="text-sm mt-1 truncate">' + (namaItem || '-') + '</p>' +
           '</div>' +
-          '<p class="font-medium whitespace-nowrap">' + formatRupiah(total) + '</p>' +
+          '<p class="font-medium whitespace-nowrap">' + (g.tanggal || '-') + '</p>' +
         '</div>' +
         '<button onclick="toggleEditStruk(\'' + g.idStruk + '\')" class="text-xs text-gray-400 mt-2">Edit</button>' +
       '</div>' +
@@ -1036,7 +1063,7 @@ function opsiProdukHtml(idTerpilih) {
 }
 
 // Form edit 2-level: header struk (berlaku ke semua item) + per-item, termasuk
-// dropdown buat nge-connect/ganti item ke produk katalog yang udah ada.
+// dropdown buat nge-connect/ganti item ke produk katalog yang udah ada + edit alias-nya.
 function formEditStruk(g) {
   const idPrefix = g.idStruk;
   let html = '<div class="mb-3 pb-3 border-b">' +
@@ -1056,24 +1083,27 @@ function formEditStruk(g) {
       '<input id="edNama-' + idItem + '" value="' + (r['Item'] || '') + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
       '<label class="text-xs text-gray-400">Terhubung ke produk katalog:</label>' +
       '<select id="edProdukLink-' + idItem + '" class="w-full border rounded px-2 py-1 mb-1 text-sm">' + opsiProdukHtml(r['ID Produk']) + '</select>' +
+      '<label class="text-xs text-gray-400">Alias (singkatan lain di struk, pisahin pakai |):</label>' +
+      '<input id="edAlias-' + idItem + '" value="' + (cariAliasProduk(r['ID Produk']) || '') + '" placeholder="Contoh: GENTLE GEN MR.BRZ360 | GG MRZ360" class="w-full border rounded px-2 py-1 mb-1 text-sm">' +
       '<div class="flex gap-1 mb-1 text-sm">' +
       '<input id="edQty-' + idItem + '" type="number" value="' + r['Qty'] + '" class="w-14 border rounded px-1 py-1">' +
       '<input id="edSatuan-' + idItem + '" value="' + (r['Satuan'] || '') + '" class="w-16 border rounded px-1 py-1">' +
       '<input id="edHarga-' + idItem + '" type="number" value="' + r['Harga Total'] + '" class="flex-1 border rounded px-1 py-1">' +
       '</div>' +
-      '<div class="flex gap-1 mb-1 text-sm">' +
-      '<select id="edJenis-' + idItem + '" class="flex-1 border rounded px-1 py-1">' +
-        '<option' + (r['Jenis'] === 'Bisnis' ? ' selected' : '') + '>Bisnis</option>' +
-        '<option' + (r['Jenis'] === 'Pribadi' ? ' selected' : '') + '>Pribadi</option>' +
-      '</select>' +
-      '<select id="edKategori-' + idItem + '" class="flex-1 border rounded px-1 py-1">' + opsiKategoriHtmlPolos(r['Kategori']) + '</select>' +
-      '</div>' +
+      '<select id="edKategori-' + idItem + '" onchange="cekTambahKategoriEdit(\'' + idItem + '\')" class="w-full border rounded px-1 py-1 mb-1 text-sm">' + opsiKategoriHtml(r['Kategori']) + '</select>' +
+      '<input id="edKategoriBaru-' + idItem + '" type="text" placeholder="Nama kategori baru" class="hidden w-full border rounded px-2 py-1 mb-1 text-sm">' +
       '<button onclick="jalankanSekali(this, \'Menyimpan...\', function(){return simpanEditItem(\'' + idItem + '\');})" class="text-xs bg-black text-white rounded px-3 py-1">Simpan Item</button>' +
       (r['Diedit Oleh'] ? '<p class="text-xs text-gray-400 mt-1">Terakhir diedit: ' + r['Diedit Oleh'] + '</p>' : '') +
     '</div>';
   }).join('');
 
   return html;
+}
+
+function cekTambahKategoriEdit(idItem) {
+  const sel = document.getElementById('edKategori-' + idItem);
+  const inputBaru = document.getElementById('edKategoriBaru-' + idItem);
+  inputBaru.classList.toggle('hidden', sel.value !== '__baru__');
 }
 
 function toggleEditStruk(idStruk) {
@@ -1118,19 +1148,36 @@ function bukaKembaliEditStrukKalauMasihDibuka(idStruk) {
 
 async function simpanEditItem(idItem) {
   try {
+    let kategori = document.getElementById('edKategori-' + idItem).value;
+    if (kategori === '__baru__') {
+      kategori = (document.getElementById('edKategoriBaru-' + idItem).value || '').trim() || 'Lain-lain';
+    }
+    const idProduk = document.getElementById('edProdukLink-' + idItem).value;
+
     const hasil = await callBackend({
       action: 'editItemStruk',
       nama: localStorage.getItem('ct_nama'),
       idItem: idItem,
       itemNama: document.getElementById('edNama-' + idItem).value.trim(),
-      idProduk: document.getElementById('edProdukLink-' + idItem).value,
+      idProduk: idProduk,
       qty: document.getElementById('edQty-' + idItem).value,
       satuan: document.getElementById('edSatuan-' + idItem).value.trim(),
       hargaTotal: document.getElementById('edHarga-' + idItem).value,
-      jenis: document.getElementById('edJenis-' + idItem).value,
-      kategori: document.getElementById('edKategori-' + idItem).value
+      kategori: kategori
     });
     if (hasil.error) { alert(hasil.error); return; }
+
+    // Alias cuma nempel ke produk katalog — kalau item ini nggak dihubungin ke produk manapun,
+    // nggak ada tempat buat nyimpen alias-nya, jadi di-skip diem2 (bukan error).
+    if (idProduk) {
+      const namaKanonik = cariNamaProduk(idProduk) || document.getElementById('edNama-' + idItem).value.trim();
+      const aliasBaru = document.getElementById('edAlias-' + idItem).value.trim();
+      await callBackend({ action: 'simpanProduk', idProduk: idProduk, namaKanonik: namaKanonik, aliasReplace: aliasBaru });
+      // Update cache di memori langsung (bukan fetch ulang) biar re-render abis ini kebaca benar
+      const pCache = katalogProdukCache.find(function (p) { return p['ID Produk'] === idProduk; });
+      if (pCache) pCache['Alias'] = aliasBaru;
+    }
+
     tandaiDataBerubah();
     alert('Item tersimpan');
     const rowLama = dataPengeluaran.find(function (r) { return r['ID Item'] === idItem; });
