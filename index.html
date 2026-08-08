@@ -67,21 +67,49 @@
 
   <div class="flex justify-between items-center p-4 border-b bg-white sticky top-0 z-10">
     <p class="text-gray-500 text-sm">Halo, <span id="namaUser" class="font-medium text-black"></span></p>
-    <button onclick="bukaLayarSetting()" class="text-lg text-gray-400" title="Pengaturan">⚙️</button>
+    <button onclick="bukaLayar({type:'setting', tab: tabAktifSekarang})" class="text-lg text-gray-400" title="Pengaturan">⚙️</button>
   </div>
 
-  <!-- TAB: INPUT -->
-  <div id="tabInput" class="p-4 pb-20">
+  <!-- TAB: HOME -->
+  <div id="tabHome" class="p-4 pb-20">
     <div id="areaCapture">
       <button onclick="document.getElementById('fotoKamera').click()"
         class="w-full bg-black text-white rounded-xl py-4 font-medium mb-2">📷 Foto Struk</button>
-      <button onclick="document.getElementById('fotoGaleri').click()"
-        class="w-full bg-white border border-gray-300 rounded-xl py-4 font-medium mb-2">🖼️ Pilih dari Galeri</button>
-      <button onclick="mulaiInputManual()"
-        class="w-full border border-gray-300 rounded-xl py-3 font-medium text-sm mb-2 text-gray-600">✍️ Input Manual (struk hilang / nota tulisan tangan)</button>
+      <div class="flex gap-2 mb-2">
+        <button onclick="document.getElementById('fotoGaleri').click()"
+          class="flex-1 bg-white border border-gray-300 rounded-xl py-3 font-medium text-sm text-gray-600">🖼️ Galeri</button>
+        <button onclick="mulaiInputManual()"
+          class="flex-1 border border-gray-300 rounded-xl py-3 font-medium text-sm text-gray-600">✍️ Input Manual</button>
+      </div>
       <input type="file" id="fotoKamera" accept="image/*" capture="environment" class="hidden" onchange="fotoDipilih(event)">
       <input type="file" id="fotoGaleri" accept="image/*" class="hidden" onchange="fotoDipilih(event)">
       <div id="statusProses" class="hidden text-center text-gray-500 text-sm py-8">Membaca struk...</div>
+
+      <!-- Ringkasan: budget bulanan vs actual + breakdown kategori -->
+      <div id="ringkasanHome" class="mt-4">
+        <div class="bg-white border rounded-xl p-4 mb-4">
+          <p class="text-xs text-gray-500 mb-1">Budget bulan ini</p>
+          <p id="labelBudgetVsActual" class="text-sm font-medium mb-2">Rp0 / Belum diset</p>
+          <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div id="barBudget" class="h-full bg-black rounded-full" style="width:0%"></div>
+          </div>
+          <div id="bagianSetBudget" class="hidden mt-3">
+            <div class="flex gap-2">
+              <input id="inputBudgetBulanan" type="number" placeholder="Set budget bulanan" class="flex-1 border rounded-lg px-3 py-2 text-sm">
+              <button onclick="jalankanSekali(this, 'Menyimpan...', simpanBudget)" class="bg-black text-white rounded-lg px-4 text-sm font-medium">Simpan</button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Direset ke 0 tiap bulan baru — perlu diisi ulang tiap bulan.</p>
+          </div>
+        </div>
+
+        <div class="bg-white border rounded-xl p-4">
+          <p class="text-xs text-gray-500 mb-3">Pengeluaran per kategori — bulan ini</p>
+          <div class="flex items-center gap-4">
+            <div id="donutKategori" style="width:96px;height:96px;border-radius:9999px;background:#e5e7eb;flex-shrink:0;"></div>
+            <div id="legendaKategori" class="flex-1 space-y-1"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="areaReview" class="hidden">
@@ -104,7 +132,7 @@
       <div id="listItem" class="space-y-2 mb-3"></div>
       <button id="tombolTambahItem" onclick="tambahItemManual()" class="hidden w-full border border-dashed rounded-lg py-2 text-sm text-gray-500 mb-3">+ Tambah Item</button>
       <div class="flex gap-2">
-        <button onclick="batalReview()" class="flex-1 border rounded-xl py-3 font-medium">Batal</button>
+        <button onclick="tutupLayarSekarang()" class="flex-1 border rounded-xl py-3 font-medium">Batal</button>
         <button id="tombolSimpan" onclick="simpanSemua()" class="flex-1 bg-black text-white rounded-xl py-3 font-medium">Simpan</button>
       </div>
     </div>
@@ -141,7 +169,7 @@
 
   <!-- BOTTOM NAV -->
   <div class="fixed bottom-0 left-0 right-0 bg-white border-t flex max-w-sm mx-auto">
-    <button id="navInput" onclick="showTab('Input')" class="flex-1 py-3 text-center text-xs text-black">📷<br>Input</button>
+    <button id="navHome" onclick="showTab('Home')" class="flex-1 py-3 text-center text-xs text-black">🏠<br>Home</button>
     <button id="navRiwayat" onclick="showTab('Riwayat')" class="flex-1 py-3 text-center text-xs text-gray-400">📋<br>Riwayat</button>
     <button id="navProduk" onclick="showTab('Produk')" class="flex-1 py-3 text-center text-xs text-gray-400">📦<br>Produk</button>
     <button id="navToko" onclick="showTab('Toko')" class="flex-1 py-3 text-center text-xs text-gray-400">🏬<br>Toko</button>
@@ -151,7 +179,7 @@
   <div id="layarSettingOverlay" class="hidden fixed inset-0 bg-white z-20 max-w-sm mx-auto overflow-y-auto">
     <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
       <h2 class="font-bold">Pengaturan</h2>
-      <button onclick="tutupLayarSetting()" class="text-gray-400 text-xl leading-none">✕</button>
+      <button onclick="tutupLayarSekarang()" class="text-gray-400 text-xl leading-none">✕</button>
     </div>
     <div class="p-4">
       <h3 class="font-medium text-sm mb-2">Koneksi</h3>
@@ -349,12 +377,21 @@ let modeManual = false;
 // dan backend cuma di-fetch ulang kalau beneran ada perubahan (simpen/edit), bukan tiap buka tab.
 let riwayatPerluFetch = true;
 let produkTokoPerluFetch = true;
+let budgetPerluFetch = true;
 let sedangMuatRiwayat = false;
 let sedangMuatProdukToko = false;
+let sedangMuatBudget = false;
+let budgetBulanIni = 0;
+let tabAktifSekarang = 'Home'; // dipakai buat scoping alert — jangan alert kalau user udah pindah tab pas fetch selesai
 
 function tandaiDataBerubah() {
   riwayatPerluFetch = true;
   produkTokoPerluFetch = true;
+}
+
+function bulanIniKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
 function muatCacheDariLocalStorage() {
@@ -362,6 +399,67 @@ function muatCacheDariLocalStorage() {
   try { katalogProdukCache = JSON.parse(localStorage.getItem('ct_cache_produk') || '[]'); } catch (e) { katalogProdukCache = []; }
   try { katalogTokoCache = JSON.parse(localStorage.getItem('ct_cache_toko') || '[]'); } catch (e) { katalogTokoCache = []; }
   try { kategoriListCache = JSON.parse(localStorage.getItem('ct_cache_kategori') || '[]'); } catch (e) { kategoriListCache = []; }
+  try {
+    const b = JSON.parse(localStorage.getItem('ct_cache_budget') || 'null');
+    budgetBulanIni = (b && b.bulan === bulanIniKey()) ? (b.nilai || 0) : 0; // beda bulan -> nggak dipake, nunggu fetch/isi baru (no carry-over)
+  } catch (e) { budgetBulanIni = 0; }
+}
+
+// ==== BACK BUTTON ANDROID — stack layar sendiri di JS, history.pushState cuma dipake ====
+// sebagai "sinyal" nambah 1 entry history. Base/root entry (state paling awal pas app baru
+// dibuka) SENGAJA nggak nambah entry sendiri, jadi kalau back dipencet pas di situ,
+// nggak ada yang di-pop -> browser/OS jalanin default-nya sendiri (minimize di PWA standalone).
+let layarStack = [{ type: 'tab', tab: 'Home' }];
+
+function bukaLayar(state) {
+  const teratas = layarStack[layarStack.length - 1];
+  if (JSON.stringify(teratas) === JSON.stringify(state)) return; // udah di layar yg sama, jangan numpuk history
+  layarStack.push(state);
+  history.pushState(null, '');
+  terapkanLayarTeratas();
+}
+
+// Dipanggil dari tombol close di UI (Batal, ✕ Setting, toggle Edit struk) — biar history
+// tetep sinkron sama stack (bukan langsung ubah DOM di 2 tempat beda).
+function tutupLayarSekarang() {
+  if (layarStack.length > 1) history.back();
+}
+
+window.addEventListener('popstate', function () {
+  if (layarStack.length > 1) layarStack.pop();
+  terapkanLayarTeratas();
+});
+
+function terapkanLayarTeratas() {
+  const state = layarStack[layarStack.length - 1] || { type: 'tab', tab: 'Home' };
+
+  // Reset semua overlay/expand dulu, baru pasang sesuai state target — biar konsisten
+  // dari state manapun asalnya (nggak perlu tau state sebelumnya apa).
+  document.getElementById('layarSettingOverlay').classList.add('hidden');
+  document.querySelectorAll('[id^="editStruk-"]').forEach(function (el) { el.classList.add('hidden'); });
+  document.getElementById('areaReview').classList.add('hidden');
+  document.getElementById('areaCapture').classList.remove('hidden');
+  document.getElementById('ringkasanHome').classList.remove('hidden');
+  modeManual = false;
+
+  const tabTujuan = state.tab || 'Home';
+  if (tabTujuan !== tabAktifSekarang) {
+    terapkanTab(tabTujuan); // beneran pindah tab -> load data (cache-first)
+  } else {
+    tampilkanTabSaja(tabTujuan); // masih di tab yg sama, cuma render layar di atasnya
+  }
+
+  if (state.type === 'review') {
+    document.getElementById('areaCapture').classList.add('hidden');
+    document.getElementById('areaReview').classList.remove('hidden');
+    document.getElementById('ringkasanHome').classList.add('hidden');
+  } else if (state.type === 'setting') {
+    isiFieldSetting();
+    document.getElementById('layarSettingOverlay').classList.remove('hidden');
+  } else if (state.type === 'edit-struk') {
+    const el = document.getElementById('editStruk-' + state.idStruk);
+    if (el) el.classList.remove('hidden');
+  }
 }
 
 window.onload = function () {
@@ -465,18 +563,37 @@ function masukKeApp() {
   document.getElementById('layarLogin').classList.add('hidden');
   document.getElementById('appUtama').classList.remove('hidden');
   document.getElementById('namaUser').innerText = localStorage.getItem('ct_nama');
-  const tabTerakhir = localStorage.getItem('ct_tab_aktif') || 'Input';
-  showTab(tabTerakhir);
+  const tabTerakhir = localStorage.getItem('ct_tab_aktif') || 'Home';
+  layarStack = [{ type: 'tab', tab: tabTerakhir }]; // ini base/root entry — nggak pushState
+  tabAktifSekarang = null; // paksa terapkanLayarTeratas() nge-load data (bukan cuma toggle DOM) pas app baru dibuka
+  terapkanLayarTeratas();
 }
 
 // ==== NAVIGASI TAB ====
+// Dipanggil dari tombol nav bawah -> masuk lewat stack biar back Android bisa balik ke tab sebelumnya.
 function showTab(tab) {
+  bukaLayar({ type: 'tab', tab: tab });
+}
+
+// Cuma toggle DOM tab (nav bar + panel yg kelihatan), TANPA trigger load data.
+// Dipake tiap render layar (termasuk overlay/sub-screen di atas tab yg sama), biar
+// nggak numpuk fetch tiap buka review/setting/expand-struk padahal tab-nya sama aja.
+function tampilkanTabSaja(tab) {
+  tabAktifSekarang = tab;
   localStorage.setItem('ct_tab_aktif', tab);
-  ['Input', 'Riwayat', 'Produk', 'Toko'].forEach(function (t) {
+  ['Home', 'Riwayat', 'Produk', 'Toko'].forEach(function (t) {
     document.getElementById('tab' + t).classList.toggle('hidden', t !== tab);
     document.getElementById('nav' + t).classList.toggle('text-black', t === tab);
     document.getElementById('nav' + t).classList.toggle('text-gray-400', t !== tab);
   });
+}
+
+// Dipake pas BENERAN pindah tab (lewat showTab / nav bawah) — toggle DOM + trigger
+// load data (cache-first, fetch cuma kalau ditandai perlu). Dipanggil dari showTab()
+// (lewat bukaLayar) maupun dari terapkanLayarTeratas() kalau tab tujuan beda dari sebelumnya.
+function terapkanTab(tab) {
+  tampilkanTabSaja(tab);
+  if (tab === 'Home') muatRingkasanHome();
   if (tab === 'Riwayat') muatRiwayat();
   if (tab === 'Produk') bukaTabProduk();
   if (tab === 'Toko') bukaTabToko();
@@ -516,6 +633,7 @@ function fotoDipilih(event) {
       }
 
       statusEl.classList.add('hidden');
+      bukaLayar({ type: 'review', tab: 'Home' });
       tampilkanReview(hasil, providerDipakai);
     } catch (err) {
       statusEl.classList.add('hidden');
@@ -526,9 +644,10 @@ function fotoDipilih(event) {
   reader.readAsDataURL(file);
 }
 
-// ==== TAB INPUT — jalur Manual ====
+// ==== TAB HOME — jalur Manual ====
 function mulaiInputManual() {
   modeManual = true;
+  bukaLayar({ type: 'review', tab: 'Home' });
   tampilkanReview({
     toko_raw: '', toko_match_id: null,
     tanggal: new Date().toISOString().slice(0, 10), jam: null, id_transaksi: null,
@@ -608,12 +727,6 @@ function cekTambahKategori(i) {
   const sel = document.querySelector('[data-i="' + i + '"][data-field="kategori"]');
   const inputBaru = document.querySelector('[data-i="' + i + '"][data-field="kategoriBaru"]');
   inputBaru.classList.toggle('hidden', sel.value !== '__baru__');
-}
-
-function batalReview() {
-  modeManual = false;
-  document.getElementById('areaReview').classList.add('hidden');
-  document.getElementById('areaCapture').classList.remove('hidden');
 }
 
 async function simpanSemua() {
@@ -714,7 +827,7 @@ async function simpanSemua() {
 
     tandaiDataBerubah();
     alert('Tersimpan!');
-    batalReview();
+    tutupLayarSekarang();
   } catch (err) {
     alert('Gagal simpan: ' + err.message);
   } finally {
@@ -727,23 +840,120 @@ async function simpanSemua() {
 let riwayatBulanAktif = new Date();
 riwayatBulanAktif.setDate(1);
 
-async function muatRiwayat() {
-  renderRiwayat(); // tampilin cache dulu, instan, ga nunggu backend
-  if (sedangMuatRiwayat) return; // lagi ada fetch jalan, biarin aja, jangan numpuk
+// Satu-satunya jalur fetch buat data Riwayat — dipake bareng sama tab Riwayat DAN
+// widget ringkasan di Home, biar nggak dobel manggil backend buat data yang sama.
+// Nggak nge-alert di sini — biar pemanggil yang mutusin (dan cuma alert kalau tab yg
+// relevan masih aktif, biar nggak nyasar kayak bug lama).
+async function pastikanRiwayatTerbaru() {
+  if (sedangMuatRiwayat) return;
   if (!riwayatPerluFetch && dataPengeluaran.length > 0) return; // ga ada perubahan, cache masih valid
 
   sedangMuatRiwayat = true;
   try {
     const hasil = await callBackend({ action: 'getRiwayat' });
-    if (hasil.error) { alert('Gagal muat riwayat: ' + hasil.error); return; }
+    if (hasil.error) throw new Error(hasil.error);
     dataPengeluaran = hasil.rows || [];
     localStorage.setItem('ct_cache_riwayat', JSON.stringify(dataPengeluaran));
     riwayatPerluFetch = false;
-    renderRiwayat();
-  } catch (err) {
-    alert('Gagal muat riwayat: ' + err.message);
   } finally {
     sedangMuatRiwayat = false;
+  }
+}
+
+async function muatRiwayat() {
+  renderRiwayat(); // tampilin cache dulu, instan, ga nunggu backend
+  try {
+    await pastikanRiwayatTerbaru();
+  } catch (err) {
+    if (tabAktifSekarang === 'Riwayat') alert('Gagal muat riwayat: ' + err.message); // cuma alert kalau user masih di tab ini
+    return;
+  }
+  if (tabAktifSekarang === 'Riwayat') renderRiwayat();
+}
+
+// ==== TAB HOME — ringkasan budget vs actual + breakdown kategori ====
+async function pastikanBudgetTerbaru() {
+  if (sedangMuatBudget) return;
+  if (!budgetPerluFetch) return;
+  sedangMuatBudget = true;
+  try {
+    const hasil = await callBackend({ action: 'getBudget', bulan: bulanIniKey() });
+    if (hasil.error) throw new Error(hasil.error);
+    budgetBulanIni = hasil.nilai || 0;
+    localStorage.setItem('ct_cache_budget', JSON.stringify({ bulan: bulanIniKey(), nilai: budgetBulanIni }));
+    budgetPerluFetch = false;
+  } finally {
+    sedangMuatBudget = false;
+  }
+}
+
+async function muatRingkasanHome() {
+  renderRingkasanHome(); // cache dulu, instan
+  try {
+    await pastikanRiwayatTerbaru();
+    await pastikanBudgetTerbaru();
+  } catch (err) {
+    console.error('Gagal refresh ringkasan Home:', err.message); // diem2 aja — Home itu landing page, jangan bising alert tiap buka app
+    return;
+  }
+  if (tabAktifSekarang === 'Home') renderRingkasanHome();
+}
+
+async function simpanBudget() {
+  const nilaiBaru = Number(document.getElementById('inputBudgetBulanan').value) || 0;
+  try {
+    const hasil = await callBackend({ action: 'setBudget', nama: localStorage.getItem('ct_nama'), bulan: bulanIniKey(), nilai: nilaiBaru });
+    if (hasil.error) { alert(hasil.error); return; }
+    budgetBulanIni = nilaiBaru;
+    localStorage.setItem('ct_cache_budget', JSON.stringify({ bulan: bulanIniKey(), nilai: budgetBulanIni }));
+    renderRingkasanHome();
+  } catch (err) {
+    alert('Gagal simpan budget: ' + err.message);
+  }
+}
+
+const WARNA_DONUT = ['#C2410C', '#0f766e', '#7c3aed', '#b45309', '#0369a1', '#be185d', '#4d7c0f'];
+
+function renderRingkasanHome() {
+  const now = new Date();
+  const rowsBulanIni = dataPengeluaran.filter(function (r) {
+    if (!r['Tanggal']) return false;
+    const t = new Date(r['Tanggal']);
+    return t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth();
+  });
+  const total = rowsBulanIni.reduce(function (s, r) { return s + Number(r['Harga Total'] || 0); }, 0);
+
+  document.getElementById('labelBudgetVsActual').innerText =
+    formatRupiah(total) + ' / ' + (budgetBulanIni > 0 ? formatRupiah(budgetBulanIni) : 'Belum diset');
+  const persen = budgetBulanIni > 0 ? Math.min(100, Math.round(total / budgetBulanIni * 100)) : 0;
+  const lebih = budgetBulanIni > 0 && total > budgetBulanIni;
+  const bar = document.getElementById('barBudget');
+  bar.style.width = persen + '%';
+  bar.className = 'h-full rounded-full ' + (lebih ? 'bg-red-500' : 'bg-black');
+
+  const perKategori = {};
+  rowsBulanIni.forEach(function (r) {
+    const k = r['Kategori'] || 'Lain-lain';
+    perKategori[k] = (perKategori[k] || 0) + Number(r['Harga Total'] || 0);
+  });
+  const keys = Object.keys(perKategori);
+  let sudut = 0;
+  const stops = [];
+  const legenda = [];
+  keys.forEach(function (k, i) {
+    const pct = total > 0 ? (perKategori[k] / total * 100) : 0;
+    const warna = WARNA_DONUT[i % WARNA_DONUT.length];
+    stops.push(warna + ' ' + sudut + '% ' + (sudut + pct) + '%');
+    sudut += pct;
+    legenda.push('<div class="flex items-center gap-2 text-xs"><span class="w-2 h-2 rounded-full inline-block" style="background:' + warna + '"></span>' + k + ' — ' + Math.round(pct) + '%</div>');
+  });
+  document.getElementById('donutKategori').style.background = keys.length ? 'conic-gradient(' + stops.join(', ') + ')' : '#e5e7eb';
+  document.getElementById('legendaKategori').innerHTML = legenda.join('') || '<p class="text-gray-400 text-xs">Belum ada pengeluaran bulan ini</p>';
+
+  const isOwner = localStorage.getItem('ct_isowner') === '1';
+  document.getElementById('bagianSetBudget').classList.toggle('hidden', !isOwner);
+  if (isOwner && document.activeElement !== document.getElementById('inputBudgetBulanan')) {
+    document.getElementById('inputBudgetBulanan').value = budgetBulanIni || '';
   }
 }
 
@@ -867,7 +1077,12 @@ function formEditStruk(g) {
 }
 
 function toggleEditStruk(idStruk) {
-  document.getElementById('editStruk-' + idStruk).classList.toggle('hidden');
+  const el = document.getElementById('editStruk-' + idStruk);
+  if (el.classList.contains('hidden')) {
+    bukaLayar({ type: 'edit-struk', idStruk: idStruk, tab: 'Riwayat' });
+  } else {
+    tutupLayarSekarang();
+  }
 }
 
 async function simpanEditHeader(idStruk) {
@@ -884,9 +1099,20 @@ async function simpanEditHeader(idStruk) {
     if (hasil.error) { alert(hasil.error); return; }
     tandaiDataBerubah();
     alert('Data struk tersimpan');
-    muatRiwayat();
+    await muatRiwayat();
+    bukaKembaliEditStrukKalauMasihDibuka(idStruk);
   } catch (err) {
     alert('Gagal simpan: ' + err.message);
+  }
+}
+
+// renderRiwayat() ngebangun ulang #listStruk dari nol tiap kali (termasuk elemen editStruk-*, defaultnya hidden),
+// jadi kalau layar edit-struk lagi kebuka pas simpen, ini munculin lagi biar nggak keliatan ketutup sendiri.
+function bukaKembaliEditStrukKalauMasihDibuka(idStruk) {
+  const top = layarStack[layarStack.length - 1];
+  if (top && top.type === 'edit-struk' && top.idStruk === idStruk) {
+    const el = document.getElementById('editStruk-' + idStruk);
+    if (el) el.classList.remove('hidden');
   }
 }
 
@@ -907,7 +1133,10 @@ async function simpanEditItem(idItem) {
     if (hasil.error) { alert(hasil.error); return; }
     tandaiDataBerubah();
     alert('Item tersimpan');
-    muatRiwayat();
+    const rowLama = dataPengeluaran.find(function (r) { return r['ID Item'] === idItem; });
+    const idStrukLama = rowLama ? rowLama['ID Struk'] : null;
+    await muatRiwayat();
+    if (idStrukLama) bukaKembaliEditStrukKalauMasihDibuka(idStrukLama);
   } catch (err) {
     alert('Gagal simpan: ' + err.message);
   }
@@ -930,13 +1159,7 @@ async function muatProdukToko() {
     localStorage.setItem('ct_cache_produk', JSON.stringify(katalogProdukCache));
     localStorage.setItem('ct_cache_toko', JSON.stringify(katalogTokoCache));
 
-    if (dataPengeluaran.length === 0 || riwayatPerluFetch) {
-      const r = await callBackend({ action: 'getRiwayat' });
-      if (r.error) throw new Error(r.error);
-      dataPengeluaran = r.rows || [];
-      localStorage.setItem('ct_cache_riwayat', JSON.stringify(dataPengeluaran));
-      riwayatPerluFetch = false;
-    }
+    await pastikanRiwayatTerbaru(); // reuse jalur yang sama, jangan fetch getRiwayat sendiri lagi
     produkTokoPerluFetch = false;
   } finally {
     sedangMuatProdukToko = false;
@@ -1110,18 +1333,15 @@ function bacaBarcodeDariGaleri(event, idProduk) {
 }
 
 // ==== OVERLAY SETTING (edit/simpan pattern biar field URL/key nggak kepencet ubah nggak sengaja) ====
-function bukaLayarSetting() {
+// Buka/tutup overlay-nya sendiri lewat bukaLayar()/tutupLayarSekarang() (lihat bagian history stack) —
+// ini cuma ngisi field-nya doang, dipanggil pas overlay beneran ditampilin (baik dari klik ⚙️ maupun back).
+function isiFieldSetting() {
   document.getElementById('inputWebAppUrl').value = localStorage.getItem('ct_webapp_url') || '';
   document.getElementById('inputGeminiKey').value = localStorage.getItem('ct_gemini_key') || '';
   document.getElementById('inputGroqKey').value = localStorage.getItem('ct_groq_key') || '';
   const isOwner = localStorage.getItem('ct_isowner') === '1';
   document.getElementById('bagianKelolaAkses').classList.toggle('hidden', !isOwner);
   if (isOwner) muatAkses();
-  document.getElementById('layarSettingOverlay').classList.remove('hidden');
-}
-
-function tutupLayarSetting() {
-  document.getElementById('layarSettingOverlay').classList.add('hidden');
 }
 
 function editSetting() {
